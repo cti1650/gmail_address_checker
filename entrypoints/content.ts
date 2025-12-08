@@ -1,4 +1,16 @@
-import { companyDomainsStorage, extensionEnabledStorage, warningSettingsStorage } from '../utils/storage';
+import { companyDomainsStorage, extensionEnabledStorage, warningSettingsStorage } from '../utils/storage'
+import { getEmailAddresses, analyzeEmailSecurity, setsEqual, getExternalDomains, type EmailData } from '../utils/email'
+import { 
+  getWarningStyles, 
+  createIndicatorElement, 
+  createExpandedPanelElement, 
+  formatRecipientsList,
+  updateElementStyle,
+  setElementContent,
+  setElementHTML,
+  showElement,
+  hideElement
+} from '../utils/ui'
 
 export default defineContentScript({
   matches: ['https://mail.google.com/*'],
@@ -20,14 +32,6 @@ export default defineContentScript({
   },
 });
 
-interface EmailData {
-  to: string[];
-  cc: string[];
-  bcc: string[];
-  from: string;
-  body: string;
-}
-
 function checkComposeEmailAddresses() {
   try {
     const emails = getEmailAddresses();
@@ -35,32 +39,6 @@ function checkComposeEmailAddresses() {
   } catch (error) {
     console.log('メールアドレス取得エラー:', error);
   }
-}
-
-function getEmailAddresses(): EmailData {
-  // To, CC, BCCのメールアドレスを取得
-  const toElements = document.querySelectorAll('[aria-label=新規メッセージ] [name=to] [data-hovercard-id],form [aria-label=To] [data-hovercard-id]');
-  const ccElements = document.querySelectorAll('[aria-label=新規メッセージ] [name=cc] [data-hovercard-id],form [aria-label=Cc] [data-hovercard-id]');
-  const bccElements = document.querySelectorAll('[aria-label=新規メッセージ] [name=bcc] [data-hovercard-id],form [aria-label=Bcc] [data-hovercard-id]');
-  
-  // Fromアドレスを取得
-  const fromElement = document.querySelector('input[name="from"]') as HTMLInputElement;
-  
-  // メール本文を取得
-  const bodyElement = document.querySelector('[name="body"]') as HTMLInputElement | HTMLTextAreaElement;
-  const bodyText = bodyElement?.value || '';
-
-  // UETフィールドを取得
-  const uetElement = document.querySelector('[name="uet"]') as HTMLInputElement | HTMLTextAreaElement;
-  const uetText = uetElement?.value || '';
-  
-  return {
-    to: Array.from(toElements).map(el => el.getAttribute('data-hovercard-id') || ''),
-    cc: Array.from(ccElements).map(el => el.getAttribute('data-hovercard-id') || ''),
-    bcc: Array.from(bccElements).map(el => el.getAttribute('data-hovercard-id') || ''),
-    from: fromElement?.value || '',
-    body: bodyText + '\n' + uetText,
-  };
 }
 
 async function analyzeAndShowRealtimeWarning(emails: EmailData) {
@@ -80,61 +58,9 @@ async function analyzeAndShowRealtimeWarning(emails: EmailData) {
     const companyDomains = await companyDomainsStorage.getValue();
     const warningSettings = await warningSettingsStorage.getValue();
     
-    // 無効の場合は非表示
-    if (warningSettings.warningLevel === 'off') {
-      hideRealtimeWarning();
-      return;
-    }
+    const result = analyzeEmailSecurity(emails, companyDomains, warningSettings);
     
-    // ドメイン分析
-    const externalDomains = new Set<string>();
-    const externalDomainsInBody = new Set<string>();
-    
-    allRecipients.forEach(email => {
-      const domain = email.split('@')[1];
-      if (domain && !companyDomains.includes(domain)) {
-        externalDomains.add(domain);
-        
-        // 厳格モード時のみ本文チェック
-        if (warningSettings.bodyCheckEnabled) {
-          const emailDomainPattern = `@${domain.toLowerCase()}`;
-          if (emails.body.toLowerCase().includes(emailDomainPattern)) {
-            externalDomainsInBody.add(domain);
-          }
-        }
-      }
-    });
-    
-    // 警告レベルとメッセージを決定
-    let warningLevel = 'safe';
-    let warningMessage = '社内のみ';
-    let detailMessage = '';
-    
-    if (externalDomains.size > 0) {
-      if (warningSettings.bodyCheckEnabled) {
-        // 厳格モード: 本文チェックを行う
-        const notInBodyDomains = new Set([...externalDomains].filter(d => !externalDomainsInBody.has(d)));
-        
-        if (notInBodyDomains.size > 0) {
-          // 本文に記載のない社外ドメインがある → 高警告
-          warningLevel = 'high';
-          warningMessage = `社外ドメイン ${externalDomains.size}件`;
-          detailMessage = `本文に記載のない社外ドメイン: ${Array.from(notInBodyDomains).join(', ')}`;
-        } else {
-          // すべて本文に記載済み → 注意
-          warningLevel = 'medium';
-          warningMessage = `社外ドメイン ${externalDomains.size}件`;
-          detailMessage = `本文に記載済みの社外ドメイン: ${Array.from(externalDomainsInBody).join(', ')}`;
-        }
-      } else {
-        // 基本モード: 本文チェックなし、社外ドメインがあれば注意
-        warningLevel = 'medium';
-        warningMessage = `社外ドメイン ${externalDomains.size}件`;
-        detailMessage = `社外ドメイン: ${Array.from(externalDomains).join(', ')}`;
-      }
-    }
-    
-    await showRealtimeWarning(warningMessage, emails, warningLevel, detailMessage);
+    await showRealtimeWarning(result.message, emails, result.level, result.detailMessage);
   } catch (error) {
     hideRealtimeWarning();
   }
@@ -263,17 +189,17 @@ function minimizeToIndicator() {
 function showIndicator(indicatorMessage: string, warningLevel: string, emails: EmailData, detailMessage?: string) {
   let indicator = document.getElementById('gmail-safe-indicator');
   if (!indicator) {
-    indicator = createIndicator();
+    indicator = createIndicatorElement();
   }
   
-  const styles = getWarningStyles(warningLevel);
-  Object.assign(indicator.style, styles.container);
+  const styles = getWarningStyles(warningLevel as any);
+  updateElementStyle(indicator, styles.container);
   
-  const iconElement = indicator.querySelector('#indicator-icon');
-  if (iconElement) iconElement.textContent = styles.icon;
+  const iconElement = indicator.querySelector('#indicator-icon') as HTMLElement;
+  setElementContent(iconElement, styles.icon);
   
-  const messageElement = indicator.querySelector('#indicator-message');
-  if (messageElement) messageElement.textContent = indicatorMessage;
+  const messageElement = indicator.querySelector('#indicator-message') as HTMLElement;
+  setElementContent(messageElement, indicatorMessage);
   
   if (warningLevel === 'medium') {
     indicator.style.cursor = 'pointer';
@@ -286,159 +212,50 @@ function showIndicator(indicatorMessage: string, warningLevel: string, emails: E
     indicator.onclick = null;
   }
   
-  indicator.style.display = 'block';
+  showElement(indicator);
 }
 
 function hideIndicator() {
   const indicator = document.getElementById('gmail-safe-indicator');
-  if (indicator) indicator.style.display = 'none';
-}
-
-function createIndicator(): HTMLElement {
-  const indicator = document.createElement('div');
-  indicator.id = 'gmail-safe-indicator';
-  
-  indicator.style.cssText = `
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    border: 1px solid;
-    border-radius: 20px;
-    padding: 8px 12px;
-    font-family: 'Roboto', Arial, sans-serif;
-    font-size: 12px;
-    z-index: 9998;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-    display: none;
-    user-select: none;
-    transition: all 0.2s ease;
-  `;
-  
-  indicator.innerHTML = `
-    <div style="display: flex; align-items: center; gap: 5px;">
-      <span id="indicator-icon" style="font-size: 14px;"></span>
-      <span id="indicator-message"></span>
-    </div>
-  `;
-  
-  // ホバー効果
-  indicator.addEventListener('mouseenter', () => {
-    if (indicator.style.cursor === 'pointer') {
-      indicator.style.transform = 'scale(1.05)';
-      indicator.style.boxShadow = '0 2px 8px rgba(0,0,0,0.2)';
-    }
-  });
-  
-  indicator.addEventListener('mouseleave', () => {
-    indicator.style.transform = 'scale(1)';
-    indicator.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
-  });
-  
-  document.body.appendChild(indicator);
-  return indicator;
+  hideElement(indicator);
 }
 
 function showExpandedPanel(message: string, emails: EmailData, warningLevel: string) {
   let panel = document.getElementById('gmail-warning-panel');
   if (!panel) {
-    panel = createExpandedPanel();
+    panel = createExpandedPanelElement();
+    
+    // イベントハンドラーを設定
+    panel.querySelector('#close-panel')?.addEventListener('click', async () => {
+      await temporarilySuppressWarning();
+    });
+    
+    panel.querySelector('#minimize-panel')?.addEventListener('click', () => {
+      minimizeToIndicator();
+    });
   }
   
-  const styles = getWarningStyles(warningLevel);
-  Object.assign(panel.style, styles.container);
+  const styles = getWarningStyles(warningLevel as any);
+  updateElementStyle(panel, styles.container);
   
-  const iconElement = panel.querySelector('#warning-icon');
-  if (iconElement) iconElement.textContent = styles.icon;
+  const iconElement = panel.querySelector('#warning-icon') as HTMLElement;
+  setElementContent(iconElement, styles.icon);
   
-  const messageElement = panel.querySelector('#warning-message');
-  if (messageElement) messageElement.innerHTML = message;
+  const messageElement = panel.querySelector('#warning-message') as HTMLElement;
+  setElementHTML(messageElement, message);
   
-  const recipientsElement = panel.querySelector('#recipients-list');
-  if (recipientsElement) {
-    const recipientsList = [];
-    if (emails.to.length > 0) recipientsList.push(`TO: ${emails.to.join(', ')}`);
-    if (emails.cc.length > 0) recipientsList.push(`CC: ${emails.cc.join(', ')}`);
-    if (emails.bcc.length > 0) recipientsList.push(`BCC: ${emails.bcc.join(', ')}`);
-    recipientsElement.innerHTML = recipientsList.join('<br>') || '送信先なし';
-  }
+  const recipientsElement = panel.querySelector('#recipients-list') as HTMLElement;
+  setElementHTML(recipientsElement, formatRecipientsList(emails));
   
   updatePanelButtons(panel, warningLevel);
-  panel.style.display = 'block';
+  showElement(panel);
 }
 
 function hideExpandedPanel() {
   const panel = document.getElementById('gmail-warning-panel');
-  if (panel) panel.style.display = 'none';
+  hideElement(panel);
 }
 
-function createExpandedPanel(): HTMLElement {
-  const panel = document.createElement('div');
-  panel.id = 'gmail-warning-panel';
-  
-  panel.style.cssText = `
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    width: 350px;
-    min-height: 120px;
-    padding: 15px;
-    border: 2px solid;
-    border-radius: 8px;
-    font-family: 'Roboto', Arial, sans-serif;
-    font-size: 14px;
-    line-height: 1.4;
-    z-index: 9999;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-    display: none;
-  `;
-  
-  panel.innerHTML = `
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-      <div style="display: flex; align-items: center; gap: 8px;">
-        <span id="warning-icon" style="font-size: 18px;"></span>
-        <strong style="font-size: 16px;">送信先チェック</strong>
-      </div>
-      <div style="display: flex; gap: 5px;">
-        <button id="minimize-panel" style="background: transparent; border: none; font-size: 14px; cursor: pointer; color: inherit; padding: 2px 5px;">＿</button>
-        <button id="close-panel" style="background: transparent; border: none; font-size: 16px; cursor: pointer; color: inherit; padding: 2px 5px;">×</button>
-      </div>
-    </div>
-    <div id="warning-message" style="margin-bottom: 10px; font-weight: 500;"></div>
-    <div style="font-size: 12px;">
-      <strong>送信先:</strong>
-      <div id="recipients-list" style="margin-top: 5px; font-family: monospace;"></div>
-    </div>
-  `;
-  
-  panel.querySelector('#close-panel')?.addEventListener('click', async () => {
-    await temporarilySuppressWarning();
-  });
-  
-  panel.querySelector('#minimize-panel')?.addEventListener('click', () => {
-    minimizeToIndicator();
-  });
-  
-  document.body.appendChild(panel);
-  return panel;
-}
-
-function getWarningStyles(warningLevel: string) {
-  const styles = {
-    safe: {
-      container: { backgroundColor: '#e8f5e8', borderColor: '#137333', color: '#137333' },
-      icon: '✓'
-    },
-    medium: {
-      container: { backgroundColor: '#fef7e0', borderColor: '#fbbc04', color: '#b06000' },
-      icon: '⚠️'
-    },
-    high: {
-      container: { backgroundColor: '#fce8e6', borderColor: '#ea4335', color: '#d93025' },
-      icon: '🚨'
-    }
-  };
-  return styles[warningLevel as keyof typeof styles] || styles.medium;
-}
 
 function updatePanelButtons(panel: HTMLElement, warningLevel: string) {
   const minimizeBtn = panel.querySelector('#minimize-panel') as HTMLElement;
@@ -451,27 +268,9 @@ function updatePanelButtons(panel: HTMLElement, warningLevel: string) {
 async function getCurrentExternalDomains(emails: EmailData): Promise<Set<string>> {
   try {
     const companyDomains = await companyDomainsStorage.getValue();
-    const externalDomains = new Set<string>();
-    
     const allRecipients = [...emails.to, ...emails.cc, ...emails.bcc].filter(Boolean);
-    allRecipients.forEach(email => {
-      const domain = email.split('@')[1];
-      if (domain && !companyDomains.includes(domain)) {
-        externalDomains.add(domain);
-      }
-    });
-    
-    return externalDomains;
+    return getExternalDomains(allRecipients, companyDomains);
   } catch (error) {
     return new Set();
   }
-}
-
-// Set の等価性をチェックするヘルパー関数
-function setsEqual<T>(set1: Set<T>, set2: Set<T>): boolean {
-  if (set1.size !== set2.size) return false;
-  for (const item of set1) {
-    if (!set2.has(item)) return false;
-  }
-  return true;
 }
