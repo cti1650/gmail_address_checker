@@ -1,0 +1,17 @@
+import { defineConfig } from 'wxt';
+
+export default defineConfig({
+  modules: ['@wxt-dev/auto-icons'],
+  manifest: {
+    permissions: [
+      'activeTab',
+      'storage'
+    ],
+    host_permissions: [
+      'https://mail.google.com/*'
+    ],
+    content_security_policy: {
+      extension_pages: "script-src 'self'; object-src 'self'"
+    }
+  }
+});

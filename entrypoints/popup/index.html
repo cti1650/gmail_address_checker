@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Gmail誤送信防止設定</title>
+  <style>
+    body {
+      width: 350px;
+      padding: 20px;
+      font-family: 'Roboto', Arial, sans-serif;
+      margin: 0;
+    }
+    
+    h2 {
+      color: #1a73e8;
+      margin-top: 0;
+      font-size: 18px;
+    }
+    
+    .setting-group {
+      margin-bottom: 20px;
+    }
+    
+    label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: 500;
+    }
+    
+    label input[type="checkbox"] {
+      margin-right: 8px;
+    }
+    
+    h3 {
+      color: #5f6368;
+      font-size: 14px;
+      margin: 10px 0 5px 0;
+    }
+    
+    input[type="text"] {
+      width: 100%;
+      padding: 8px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      box-sizing: border-box;
+    }
+    
+    .domain-list {
+      font-size: 12px;
+      color: #666;
+      margin-top: 5px;
+    }
+    
+    button {
+      background: #1a73e8;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    
+    button:hover {
+      background: #1557b0;
+    }
+    
+    .status {
+      margin-top: 10px;
+      padding: 8px;
+      border-radius: 4px;
+      font-size: 12px;
+    }
+    
+    .success {
+      background: #e8f5e8;
+      color: #137333;
+      border: 1px solid #137333;
+    }
+  </style>
+</head>
+<body>
+  <h2>Gmail誤送信防止設定</h2>
+  
+  <div class="setting-group">
+    <label>
+      <input type="checkbox" id="extension-enabled" checked>
+      拡張機能を有効にする
+    </label>
+  </div>
+  
+  <div class="setting-group">
+    <label for="company-domains">社内ドメイン（カンマ区切り）:</label>
+    <input type="text" id="company-domains" placeholder="example.com, company.local">
+    <div class="domain-list">例: company.com, internal.local</div>
+  </div>
+  
+  <div class="setting-group">
+    <h3>警告表示設定</h3>
+    <label>
+      <input type="checkbox" id="warn-single-external" checked>
+      社外ドメイン1つで警告
+    </label>
+    <label>
+      <input type="checkbox" id="warn-multiple-external" checked>
+      社外ドメイン複数で警告
+    </label>
+    <label>
+      <input type="checkbox" id="warn-bcc-external" checked>
+      BCC社外ドメインで警告
+    </label>
+    <label>
+      <input type="checkbox" id="warn-new-conversation" checked>
+      新規会話で社外ドメイン警告
+    </label>
+  </div>
+  
+  <button id="save-settings">設定を保存</button>
+  
+  <div id="status"></div>
+  
+  <script type="module" src="main.ts"></script>
+</body>
+</html>
