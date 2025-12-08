@@ -123,7 +123,7 @@ async function analyzeAndShowRealtimeWarning(emails: EmailData) {
     // 条件1: 社内ドメインのみ -> 安全
     if (externalDomains.size === 0) {
       warningLevel = 'safe';
-      warningMessage = `✓ すべて社内ドメインです (${internalDomains.size}ドメイン)`;
+      warningMessage = `社内のみ`;
     } else {
       // 本文チェックが有効かどうかで分岐
       if (warningSettings.enableBodyCheck) {
@@ -133,30 +133,34 @@ async function analyzeAndShowRealtimeWarning(emails: EmailData) {
         // 本文に記載されていない社外ドメインがある場合 -> 警告
         if (highRiskDomains.length > 0 && warningSettings.showForSingleExternal) {
           warningLevel = 'high';
-          warningsList.push(`🚨 本文に記載のない社外ドメイン: ${highRiskDomains.join(', ')}`);
+          warningsList.push(`本文に記載のない社外ドメイン: ${highRiskDomains.join(', ')}`);
         }
         
         // すべての社外ドメインが本文に記載されている場合 -> 注意
         if (lowRiskDomains.length > 0 && warningLevel !== 'high') {
           warningLevel = 'medium';
-          warningsList.push(`📝 本文に記載済みの社外ドメイン: ${lowRiskDomains.join(', ')}`);
+          // インジケーター用に簡潔な表示
+          warningMessage = `社外ドメイン ${lowRiskDomains.length}件`;
+          // 詳細パネル用に詳細な情報を追加
+          warningsList.push(`本文に記載済みの社外ドメイン: ${lowRiskDomains.join(', ')}`);
         }
         
         // 複数の社外ドメインの場合は追加情報として表示
         if (externalDomains.size >= 2 && warningSettings.showForMultipleExternal) {
-          warningsList.push(`🔢 社外ドメイン合計 ${externalDomains.size}件`);
+          warningsList.push(`社外ドメイン合計 ${externalDomains.size}件`);
         }
       } else {
         // 本文チェック無効時は従来通り
         if (externalDomains.size === 1 && warningSettings.showForSingleExternal) {
           warningLevel = 'medium';
-          warningsList.push(`⚠️ 社外ドメイン: ${Array.from(externalDomains)[0]}`);
+          warningMessage = `社外ドメイン 1件`;
+          warningsList.push(`社外ドメイン: ${Array.from(externalDomains)[0]}`);
         }
         
         // 複数の社外ドメイン -> 警告
         if (externalDomains.size >= 2 && warningSettings.showForMultipleExternal) {
           warningLevel = 'high';
-          warningsList.push(`🚨 複数の社外ドメイン: ${Array.from(externalDomains).join(', ')}`);
+          warningsList.push(`複数の社外ドメイン: ${Array.from(externalDomains).join(', ')}`);
         }
       }
       
@@ -185,14 +189,25 @@ async function analyzeAndShowRealtimeWarning(emails: EmailData) {
         }
       }
       
-      if (warningsList.length > 0) {
-        warningMessage = warningsList.join('<br>');
-      } else if (externalDomains.size > 0) {
-        warningMessage = `外部ドメイン ${externalDomains.size}件`;
+      // インジケーター用のメッセージが設定されていない場合のフォールバック
+      if (!warningMessage && warningsList.length > 0) {
+        if (warningLevel === 'high') {
+          warningMessage = `社外ドメイン ${externalDomains.size}件`;
+        } else if (warningLevel === 'medium') {
+          warningMessage = `社外ドメイン ${externalDomains.size}件`;
+        }
+      }
+      
+      // 詳細パネル用のメッセージは変更なし
+      if (warningsList.length === 0 && externalDomains.size > 0) {
+        warningsList.push(`外部ドメイン ${externalDomains.size}件`);
       }
     }
     
-    showRealtimeWarning(warningMessage, emails, warningLevel);
+    // 詳細パネル用のメッセージを作成
+    const detailMessage = warningsList.length > 0 ? warningsList.join('<br>') : warningMessage;
+    
+    showRealtimeWarning(warningMessage, emails, warningLevel, detailMessage);
   } catch (error) {
     // Extension context invalidatedエラーなどを処理
     console.log('拡張機能コンテキストエラー:', error);
@@ -205,9 +220,9 @@ let lastWarningState = '';
 let lastWarningLevel = '';
 let autoHideTimeout: NodeJS.Timeout | null = null;
 
-function showRealtimeWarning(message: string, emails: EmailData, warningLevel: string = 'medium') {
+function showRealtimeWarning(indicatorMessage: string, emails: EmailData, warningLevel: string = 'medium', detailMessage?: string) {
   // 更新が必要かチェック（レンダリング負荷軽減）
-  const currentState = `${warningLevel}:${message}`;
+  const currentState = `${warningLevel}:${indicatorMessage}`;
   if (currentState === lastWarningState) {
     return;
   }
@@ -221,7 +236,7 @@ function showRealtimeWarning(message: string, emails: EmailData, warningLevel: s
 
   if (warningLevel === 'safe') {
     // 安全時：小さなインジケーターのみ表示、10秒後に自動非表示
-    showMinimizedIndicator(message, warningLevel, emails);
+    showMinimizedIndicator(indicatorMessage, warningLevel, emails, detailMessage);
     hideExpandedPanel();
     
     // 10秒後に自動非表示
@@ -231,12 +246,12 @@ function showRealtimeWarning(message: string, emails: EmailData, warningLevel: s
     }, 10000);
   } else if (warningLevel === 'medium') {
     // 注意時：小さなインジケーターのみ表示（クリックで詳細展開）
-    showMinimizedIndicator(message, warningLevel, emails);
+    showMinimizedIndicator(indicatorMessage, warningLevel, emails, detailMessage);
     hideExpandedPanel();
   } else {
     // 強い警告時：詳細パネルを即座に表示
     hideMinimizedIndicator();
-    showExpandedPanel(message, emails, warningLevel);
+    showExpandedPanel(detailMessage || indicatorMessage, emails, warningLevel);
   }
 }
 
@@ -246,7 +261,7 @@ function hideRealtimeWarning() {
   lastWarningState = '';
 }
 
-function showMinimizedIndicator(message: string, warningLevel: string, emails: EmailData) {
+function showMinimizedIndicator(indicatorMessage: string, warningLevel: string, emails: EmailData, detailMessage?: string) {
   let indicator = document.getElementById('gmail-safe-indicator');
   if (!indicator) {
     indicator = createMinimizedIndicator();
@@ -285,7 +300,7 @@ function showMinimizedIndicator(message: string, warningLevel: string, emails: E
   
   const messageElement = indicator.querySelector('#indicator-message');
   if (messageElement) {
-    messageElement.textContent = message;
+    messageElement.textContent = indicatorMessage;
   }
   
   // 注意時のみクリック可能にする
@@ -293,7 +308,7 @@ function showMinimizedIndicator(message: string, warningLevel: string, emails: E
     indicator.style.cursor = 'pointer';
     indicator.onclick = () => {
       hideMinimizedIndicator();
-      showExpandedPanel(message, emails, warningLevel);
+      showExpandedPanel(detailMessage || indicatorMessage, emails, warningLevel);
     };
   } else {
     indicator.style.cursor = 'default';
