@@ -30,20 +30,14 @@ export const extensionEnabledStorage = storage.defineItem<boolean>(
   }
 );
 
-// 警告表示設定
+// 警告表示設定（簡素化）
 export const warningSettingsStorage = storage.defineItem<{
-  showForSingleExternal: boolean;
-  showForMultipleExternal: boolean;
-  showForBccExternal: boolean;
-  showForNewConversation: boolean;
-  enableBodyCheck: boolean;
+  warningLevel: 'off' | 'basic' | 'strict';
+  bodyCheckEnabled: boolean;
 }>("sync:warningSettings", {
   defaultValue: {
-    showForSingleExternal: true,
-    showForMultipleExternal: true,
-    showForBccExternal: true,
-    showForNewConversation: true,
-    enableBodyCheck: true,
+    warningLevel: 'strict',
+    bodyCheckEnabled: true,
   },
-  version: 2,
+  version: 4,
 });

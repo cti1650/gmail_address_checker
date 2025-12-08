@@ -27,7 +27,8 @@
       font-weight: 500;
     }
     
-    label input[type="checkbox"] {
+    label input[type="checkbox"],
+    label input[type="radio"] {
       margin-right: 8px;
     }
     
@@ -96,34 +97,21 @@
   </div>
   
   <div class="setting-group">
-    <h3>警告表示設定</h3>
+    <h3>警告レベル</h3>
     <label>
-      <input type="checkbox" id="warn-single-external" checked>
-      社外ドメイン1つで警告
+      <input type="radio" name="warning-level" value="off">
+      無効
     </label>
     <label>
-      <input type="checkbox" id="warn-multiple-external" checked>
-      社外ドメイン複数で警告
+      <input type="radio" name="warning-level" value="basic">
+      基本（社外ドメインのみ警告）
     </label>
     <label>
-      <input type="checkbox" id="warn-bcc-external" checked>
-      BCC社外ドメインで警告
+      <input type="radio" name="warning-level" value="strict" checked>
+      厳格（本文チェック含む詳細警告）
     </label>
-    <label>
-      <input type="checkbox" id="warn-new-conversation" checked>
-      新規会話で社外ドメイン警告
-    </label>
-    <label>
-      <input type="checkbox" id="enable-body-check" checked>
-      本文チェック機能を有効にする
-    </label>
-  </div>
-  
-  <div class="setting-group">
-    <h3>本文チェックについて</h3>
-    <div style="font-size: 12px; color: #666; line-height: 1.4;">
-      本文に社外ドメインが記載されている場合、意図的な送信として警告レベルを下げます。
-      記載がない場合は誤送信の可能性が高いとして強い警告を表示します。
+    <div style="font-size: 12px; color: #666; margin-top: 5px;">
+      厳格モード：メール本文に@ドメイン形式で記載されている場合、警告レベルを下げます
     </div>
   </div>
   

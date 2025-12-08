@@ -17,18 +17,11 @@ async function loadSettings() {
       enabledCheckbox.checked = extensionEnabled;
     }
     
-    // 警告設定のチェックボックス
-    const singleExternalCheckbox = document.getElementById('warn-single-external') as HTMLInputElement;
-    const multipleExternalCheckbox = document.getElementById('warn-multiple-external') as HTMLInputElement;
-    const bccExternalCheckbox = document.getElementById('warn-bcc-external') as HTMLInputElement;
-    const newConversationCheckbox = document.getElementById('warn-new-conversation') as HTMLInputElement;
-    const enableBodyCheckCheckbox = document.getElementById('enable-body-check') as HTMLInputElement;
-    
-    if (singleExternalCheckbox) singleExternalCheckbox.checked = warningSettings.showForSingleExternal;
-    if (multipleExternalCheckbox) multipleExternalCheckbox.checked = warningSettings.showForMultipleExternal;
-    if (bccExternalCheckbox) bccExternalCheckbox.checked = warningSettings.showForBccExternal;
-    if (newConversationCheckbox) newConversationCheckbox.checked = warningSettings.showForNewConversation;
-    if (enableBodyCheckCheckbox) enableBodyCheckCheckbox.checked = warningSettings.enableBodyCheck;
+    // 警告レベルのラジオボタン
+    const warningLevelRadios = document.querySelectorAll('input[name="warning-level"]') as NodeListOf<HTMLInputElement>;
+    warningLevelRadios.forEach(radio => {
+      radio.checked = radio.value === warningSettings.warningLevel;
+    });
   } catch (error) {
     console.error('設定の読み込みに失敗しました:', error);
   }
@@ -51,18 +44,12 @@ async function saveSettings() {
     }
     
     // 警告設定の保存
-    const singleExternalCheckbox = document.getElementById('warn-single-external') as HTMLInputElement;
-    const multipleExternalCheckbox = document.getElementById('warn-multiple-external') as HTMLInputElement;
-    const bccExternalCheckbox = document.getElementById('warn-bcc-external') as HTMLInputElement;
-    const newConversationCheckbox = document.getElementById('warn-new-conversation') as HTMLInputElement;
-    const enableBodyCheckCheckbox = document.getElementById('enable-body-check') as HTMLInputElement;
+    const selectedWarningLevel = document.querySelector('input[name="warning-level"]:checked') as HTMLInputElement;
+    const warningLevel = selectedWarningLevel?.value || 'strict';
     
     await warningSettingsStorage.setValue({
-      showForSingleExternal: singleExternalCheckbox?.checked ?? true,
-      showForMultipleExternal: multipleExternalCheckbox?.checked ?? true,
-      showForBccExternal: bccExternalCheckbox?.checked ?? true,
-      showForNewConversation: newConversationCheckbox?.checked ?? true,
-      enableBodyCheck: enableBodyCheckCheckbox?.checked ?? true,
+      warningLevel: warningLevel as 'off' | 'basic' | 'strict',
+      bodyCheckEnabled: warningLevel === 'strict',
     });
     
     const statusDiv = document.getElementById('status');
