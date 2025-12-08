@@ -126,7 +126,7 @@ async function analyzeAndShowRealtimeWarning(emails: EmailData) {
       }
     }
     
-    showRealtimeWarning(warningMessage, emails, warningLevel, detailMessage);
+    await showRealtimeWarning(warningMessage, emails, warningLevel, detailMessage);
   } catch (error) {
     hideRealtimeWarning();
   }
@@ -143,6 +143,7 @@ interface UIState {
   isTemporarilySuppressed: boolean;
   suppressTimeout: NodeJS.Timeout | null;
   suppressedWarningLevel: string;
+  suppressedDomains: Set<string>;
 }
 
 const uiState: UIState = {
@@ -154,15 +155,20 @@ const uiState: UIState = {
   lastEmails: null,
   isTemporarilySuppressed: false,
   suppressTimeout: null,
-  suppressedWarningLevel: ''
+  suppressedWarningLevel: '',
+  suppressedDomains: new Set()
 };
 
-function showRealtimeWarning(indicatorMessage: string, emails: EmailData, warningLevel: string = 'medium', detailMessage?: string) {
+async function showRealtimeWarning(indicatorMessage: string, emails: EmailData, warningLevel: string = 'medium', detailMessage?: string) {
   let forceShow = false;
   
   // 抑制チェック
   if (uiState.isTemporarilySuppressed) {
-    if (warningLevel !== uiState.suppressedWarningLevel) {
+    const levelChanged = warningLevel !== uiState.suppressedWarningLevel;
+    const currentExternalDomains = await getCurrentExternalDomains(emails);
+    const domainsChanged = !setsEqual(currentExternalDomains, uiState.suppressedDomains);
+    
+    if (levelChanged || domainsChanged) {
       clearSuppression();
       forceShow = true;
     } else {
@@ -212,8 +218,9 @@ function hideRealtimeWarning() {
   uiState.lastWarningState = '';
 }
 
-function temporarilySuppressWarning() {
+async function temporarilySuppressWarning() {
   uiState.suppressedWarningLevel = uiState.lastWarningLevel;
+  uiState.suppressedDomains = uiState.lastEmails ? await getCurrentExternalDomains(uiState.lastEmails) : new Set();
   uiState.isTemporarilySuppressed = true;
   hideIndicator();
   hideExpandedPanel();
@@ -230,6 +237,7 @@ function temporarilySuppressWarning() {
 function clearSuppression() {
   uiState.isTemporarilySuppressed = false;
   uiState.suppressedWarningLevel = '';
+  uiState.suppressedDomains = new Set();
   uiState.lastWarningState = '';
   if (uiState.suppressTimeout) {
     clearTimeout(uiState.suppressTimeout);
@@ -394,8 +402,8 @@ function createExpandedPanel(): HTMLElement {
     </div>
   `;
   
-  panel.querySelector('#close-panel')?.addEventListener('click', () => {
-    temporarilySuppressWarning();
+  panel.querySelector('#close-panel')?.addEventListener('click', async () => {
+    await temporarilySuppressWarning();
   });
   
   panel.querySelector('#minimize-panel')?.addEventListener('click', () => {
@@ -429,4 +437,33 @@ function updatePanelButtons(panel: HTMLElement, warningLevel: string) {
   if (minimizeBtn) {
     minimizeBtn.style.display = warningLevel === 'medium' ? 'block' : 'none';
   }
+}
+
+// 外部ドメインを取得するヘルパー関数
+async function getCurrentExternalDomains(emails: EmailData): Promise<Set<string>> {
+  try {
+    const companyDomains = await companyDomainsStorage.getValue();
+    const externalDomains = new Set<string>();
+    
+    const allRecipients = [...emails.to, ...emails.cc, ...emails.bcc].filter(Boolean);
+    allRecipients.forEach(email => {
+      const domain = email.split('@')[1];
+      if (domain && !companyDomains.includes(domain)) {
+        externalDomains.add(domain);
+      }
+    });
+    
+    return externalDomains;
+  } catch (error) {
+    return new Set();
+  }
+}
+
+// Set の等価性をチェックするヘルパー関数
+function setsEqual<T>(set1: Set<T>, set2: Set<T>): boolean {
+  if (set1.size !== set2.size) return false;
+  for (const item of set1) {
+    if (!set2.has(item)) return false;
+  }
+  return true;
 }
