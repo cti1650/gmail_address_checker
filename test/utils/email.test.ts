@@ -527,20 +527,15 @@ describe('email utilities', () => {
     })
   })
 
-  describe('multiple compose windows support', () => {
+  describe('multiple compose windows support (legacy behavior)', () => {
     beforeEach(() => {
       document.body.innerHTML = ''
     })
 
-    it('複数のメール作成画面がある場合、最前面のものを取得する', () => {
-      // 最初のメール作成画面 (z-index: 1000)
+    it('複数のメール作成画面がある場合、従来の方法ですべてを取得する', () => {
+      // 複数のメール作成画面を作成（従来の実装ではすべて取得される）
       const firstCompose = document.createElement('div')
       firstCompose.setAttribute('aria-label', '新規メッセージ')
-      firstCompose.style.zIndex = '1000'
-      firstCompose.style.position = 'fixed'
-      firstCompose.style.display = 'block'
-      firstCompose.style.width = '500px'
-      firstCompose.style.height = '400px'
       
       const firstToContainer = document.createElement('div')
       firstToContainer.setAttribute('name', 'to')
@@ -549,14 +544,8 @@ describe('email utilities', () => {
       firstToContainer.appendChild(firstToElement)
       firstCompose.appendChild(firstToContainer)
 
-      // 2番目のメール作成画面 (z-index: 2000, 最前面)
       const secondCompose = document.createElement('div')
       secondCompose.setAttribute('aria-label', '新規メッセージ')
-      secondCompose.style.zIndex = '2000'
-      secondCompose.style.position = 'fixed'
-      secondCompose.style.display = 'block'
-      secondCompose.style.width = '500px'
-      secondCompose.style.height = '400px'
       
       const secondToContainer = document.createElement('div')
       secondToContainer.setAttribute('name', 'to')
@@ -570,18 +559,14 @@ describe('email utilities', () => {
       
       const result = getEmailAddresses()
       
-      // 最前面（z-index が高い）のメール作成画面の情報が取得されることを確認
-      expect(result.to).toEqual(['second@example.com'])
-      expect(result.to).not.toContain('first@example.com')
+      // 従来の実装では両方のメール作成画面の情報が取得される
+      expect(result.to).toEqual(['first@example.com', 'second@example.com'])
     })
 
-    it('非表示のメール作成画面は無視される', () => {
+    it('表示・非表示に関わらずすべてのメール作成画面から情報を取得する', () => {
       // 表示されているメール作成画面
       const visibleCompose = document.createElement('div')
       visibleCompose.setAttribute('aria-label', '新規メッセージ')
-      visibleCompose.style.display = 'block'
-      visibleCompose.style.width = '500px'
-      visibleCompose.style.height = '400px'
       
       const visibleToContainer = document.createElement('div')
       visibleToContainer.setAttribute('name', 'to')
@@ -590,7 +575,7 @@ describe('email utilities', () => {
       visibleToContainer.appendChild(visibleToElement)
       visibleCompose.appendChild(visibleToContainer)
 
-      // 非表示のメール作成画面
+      // 非表示のメール作成画面（従来の実装では取得される）
       const hiddenCompose = document.createElement('div')
       hiddenCompose.setAttribute('aria-label', '新規メッセージ')
       hiddenCompose.style.display = 'none'
@@ -607,9 +592,8 @@ describe('email utilities', () => {
       
       const result = getEmailAddresses()
       
-      // 表示されているメール作成画面の情報のみが取得されることを確認
-      expect(result.to).toEqual(['visible@example.com'])
-      expect(result.to).not.toContain('hidden@example.com')
+      // 従来の実装では表示状態に関係なくすべて取得される
+      expect(result.to).toEqual(['visible@example.com', 'hidden@example.com'])
     })
 
     it('メール作成画面が見つからない場合は空のデータを返す', () => {

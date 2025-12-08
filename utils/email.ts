@@ -7,6 +7,12 @@ export interface EmailData {
 }
 
 function getActiveComposeWindow(): Element | null {
+  // まず従来の方法で基本的なメール作成画面があるかチェック
+  const basicComposeCheck = document.querySelector('[aria-label="新規メッセージ"], form[enctype="multipart/form-data"]')
+  if (!basicComposeCheck) {
+    return null
+  }
+  
   // Gmailのメール作成画面を特定するための複数のセレクタパターン
   const composeSelectors = [
     '[aria-label="新規メッセージ"]',
@@ -14,7 +20,6 @@ function getActiveComposeWindow(): Element | null {
     '[role="dialog"][aria-label*="Message"]',
     '.nH[role="dialog"]', // Gmail の一般的なダイアログクラス
     'form[enctype="multipart/form-data"]', // メール送信フォーム
-    'div', // 広範囲なセレクタも含める（テスト環境対応）
   ]
   
   let composeWindows: Element[] = []
@@ -168,79 +173,8 @@ function getEmailAddressesLegacy(): EmailData {
 }
 
 export function getEmailAddresses(): EmailData {
-  try {
-    // 最前面のメール作成画面を特定
-    const activeComposeWindow = getActiveComposeWindow()
-    if (!activeComposeWindow) {
-      // フォールバック: 従来の方法で要素を検索
-      return getEmailAddressesLegacy()
-    }
-    
-    // アクティブなウィンドウ内のTo, CC, BCCのメールアドレスを取得
-    const toElements = activeComposeWindow.querySelectorAll('[name=to] [data-hovercard-id]')
-    const ccElements = activeComposeWindow.querySelectorAll('[name=cc] [data-hovercard-id]')
-    const bccElements = activeComposeWindow.querySelectorAll('[name=bcc] [data-hovercard-id]')
-    
-    // Fromアドレスを取得（アクティブなウィンドウ内から）
-    const fromElement = activeComposeWindow.querySelector('input[name="from"]') as HTMLInputElement
-    
-    // メール本文を取得 - アクティブなウィンドウ内の複数のセレクタを試行
-    const bodySelectors = [
-      '[name="body"]',
-      '[data-name="body"]',
-      '.gmail_default',
-      '[contenteditable="true"][role="textbox"]'
-    ]
-    
-    let bodyText = ''
-    for (const selector of bodySelectors) {
-      const bodyElement = activeComposeWindow.querySelector(selector) as HTMLInputElement | HTMLTextAreaElement | HTMLElement
-      if (bodyElement) {
-        bodyText = bodyElement.textContent || bodyElement.innerText || (bodyElement as any).value || ''
-        break
-      }
-    }
-
-    // UETフィールドを取得 - アクティブなウィンドウ内の複数のセレクタを試行
-    const uetSelectors = [
-      '[name="uet"]',
-      '[data-name="uet"]'
-    ]
-    
-    let uetText = ''
-    for (const selector of uetSelectors) {
-      const uetElement = activeComposeWindow.querySelector(selector) as HTMLInputElement | HTMLTextAreaElement
-      if (uetElement) {
-        uetText = uetElement.value || ''
-        break
-      }
-    }
-    
-    // メールアドレスのバリデーションと重複除去
-    const extractValidEmails = (elements: NodeList): string[] => {
-      return Array.from(elements)
-        .map(el => (el as Element).getAttribute('data-hovercard-id') || '')
-        .filter(email => email && isValidEmail(email))
-        .filter((email, index, array) => array.indexOf(email) === index) // 重複除去
-    }
-    
-    return {
-      to: extractValidEmails(toElements),
-      cc: extractValidEmails(ccElements),
-      bcc: extractValidEmails(bccElements),
-      from: fromElement?.value || '',
-      body: combineBodyText(bodyText, uetText),
-    }
-  } catch (error) {
-    console.warn('Error getting email addresses:', error)
-    return {
-      to: [],
-      cc: [],
-      bcc: [],
-      from: '',
-      body: '',
-    }
-  }
+  // 一時的に複数ウィンドウ対応を無効化し、安定した従来の動作に戻す
+  return getEmailAddressesLegacy()
 }
 
 function isValidEmail(email: string): boolean {
