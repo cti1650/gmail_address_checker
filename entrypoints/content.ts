@@ -105,7 +105,9 @@ async function analyzeAndShowRealtimeWarning(emails: EmailData) {
           
           // 本文チェックが有効な場合のみ分類、無効な場合は分類しない
           if (warningSettings.enableBodyCheck) {
-            if (emails.body.toLowerCase().includes(domain.toLowerCase())) {
+            // @ドメイン形式でチェック（URLと区別するため）
+            const emailDomainPattern = `@${domain.toLowerCase()}`;
+            if (emails.body.toLowerCase().includes(emailDomainPattern)) {
               externalDomainsInBody.add(domain);
             } else {
               externalDomainsNotInBody.add(domain);
