@@ -98,11 +98,14 @@ async function analyzeAndShowRealtimeWarning(emails: EmailData) {
           internalDomains.add(domain);
         } else {
           externalDomains.add(domain);
-          // 本文チェックが有効な場合のみ本文を確認
-          if (warningSettings.enableBodyCheck && emails.body.toLowerCase().includes(domain.toLowerCase())) {
-            externalDomainsInBody.add(domain);
-          } else {
-            externalDomainsNotInBody.add(domain);
+          
+          // 本文チェックが有効な場合のみ分類、無効な場合は分類しない
+          if (warningSettings.enableBodyCheck) {
+            if (emails.body.toLowerCase().includes(domain.toLowerCase())) {
+              externalDomainsInBody.add(domain);
+            } else {
+              externalDomainsNotInBody.add(domain);
+            }
           }
         }
       }
@@ -118,24 +121,26 @@ async function analyzeAndShowRealtimeWarning(emails: EmailData) {
       warningLevel = 'safe';
       warningMessage = `✓ すべて社内ドメインです (${internalDomains.size}ドメイン)`;
     } else {
-      // 本文に記載されていない外部ドメインは高リスク
-      const highRiskDomains = Array.from(externalDomainsNotInBody);
-      const lowRiskDomains = Array.from(externalDomainsInBody);
-      
       // 本文チェックが有効かどうかで分岐
       if (warningSettings.enableBodyCheck) {
-        // 条件2: 本文に言及されていない社外ドメイン -> 強い警告
+        const highRiskDomains = Array.from(externalDomainsNotInBody);
+        const lowRiskDomains = Array.from(externalDomainsInBody);
+        
+        // 本文に記載されていない社外ドメインがある場合 -> 警告
         if (highRiskDomains.length > 0 && warningSettings.showForSingleExternal) {
           warningLevel = 'high';
           warningsList.push(`🚨 本文に記載のない社外ドメイン: ${highRiskDomains.join(', ')}`);
         }
         
-        // 条件3: 本文に言及されている社外ドメイン -> 軽い注意
-        if (lowRiskDomains.length > 0 && warningSettings.showForSingleExternal) {
-          if (warningLevel !== 'high') {
-            warningLevel = 'medium';
-          }
+        // すべての社外ドメインが本文に記載されている場合 -> 注意
+        if (lowRiskDomains.length > 0 && warningLevel !== 'high') {
+          warningLevel = 'medium';
           warningsList.push(`📝 本文に記載済みの社外ドメイン: ${lowRiskDomains.join(', ')}`);
+        }
+        
+        // 複数の社外ドメインの場合は追加情報として表示
+        if (externalDomains.size >= 2 && warningSettings.showForMultipleExternal) {
+          warningsList.push(`🔢 社外ドメイン合計 ${externalDomains.size}件`);
         }
       } else {
         // 本文チェック無効時は従来通り
@@ -143,12 +148,12 @@ async function analyzeAndShowRealtimeWarning(emails: EmailData) {
           warningLevel = 'medium';
           warningsList.push(`⚠️ 社外ドメイン: ${Array.from(externalDomains)[0]}`);
         }
-      }
-      
-      // 条件4: 複数の社外ドメイン -> 追加警告
-      if (externalDomains.size >= 2 && warningSettings.showForMultipleExternal) {
-        warningLevel = 'high';
-        warningsList.push(`🔢 複数の社外ドメイン (${externalDomains.size}件)`);
+        
+        // 複数の社外ドメイン -> 警告
+        if (externalDomains.size >= 2 && warningSettings.showForMultipleExternal) {
+          warningLevel = 'high';
+          warningsList.push(`🚨 複数の社外ドメイン: ${Array.from(externalDomains).join(', ')}`);
+        }
       }
       
       // 条件5: BCCに社外が入っている場合 -> 強い警告
