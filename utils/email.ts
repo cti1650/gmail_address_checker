@@ -7,29 +7,96 @@ export interface EmailData {
 }
 
 export function getEmailAddresses(): EmailData {
-  // To, CC, BCCのメールアドレスを取得
-  const toElements = document.querySelectorAll('[aria-label=新規メッセージ] [name=to] [data-hovercard-id],form [aria-label=To] [data-hovercard-id]')
-  const ccElements = document.querySelectorAll('[aria-label=新規メッセージ] [name=cc] [data-hovercard-id],form [aria-label=Cc] [data-hovercard-id]')
-  const bccElements = document.querySelectorAll('[aria-label=新規メッセージ] [name=bcc] [data-hovercard-id],form [aria-label=Bcc] [data-hovercard-id]')
-  
-  // Fromアドレスを取得
-  const fromElement = document.querySelector('input[name="from"]') as HTMLInputElement
-  
-  // メール本文を取得
-  const bodyElement = document.querySelector('[name="body"]') as HTMLInputElement | HTMLTextAreaElement
-  const bodyText = bodyElement?.value || ''
+  try {
+    // To, CC, BCCのメールアドレスを取得
+    const toElements = document.querySelectorAll('[aria-label=新規メッセージ] [name=to] [data-hovercard-id],form [aria-label=To] [data-hovercard-id]')
+    const ccElements = document.querySelectorAll('[aria-label=新規メッセージ] [name=cc] [data-hovercard-id],form [aria-label=Cc] [data-hovercard-id]')
+    const bccElements = document.querySelectorAll('[aria-label=新規メッセージ] [name=bcc] [data-hovercard-id],form [aria-label=Bcc] [data-hovercard-id]')
+    
+    // Fromアドレスを取得
+    const fromElement = document.querySelector('input[name="from"]') as HTMLInputElement
+    
+    // メール本文を取得 - 複数のセレクタを試行
+    const bodySelectors = [
+      '[name="body"]',
+      '[data-name="body"]',
+      '.gmail_default',
+      '[contenteditable="true"][role="textbox"]'
+    ]
+    
+    let bodyText = ''
+    for (const selector of bodySelectors) {
+      const bodyElement = document.querySelector(selector) as HTMLInputElement | HTMLTextAreaElement | HTMLElement
+      if (bodyElement) {
+        bodyText = bodyElement.textContent || bodyElement.innerText || (bodyElement as any).value || ''
+        break
+      }
+    }
 
-  // UETフィールドを取得
-  const uetElement = document.querySelector('[name="uet"]') as HTMLInputElement | HTMLTextAreaElement
-  const uetText = uetElement?.value || ''
-  
-  return {
-    to: Array.from(toElements).map(el => el.getAttribute('data-hovercard-id') || ''),
-    cc: Array.from(ccElements).map(el => el.getAttribute('data-hovercard-id') || ''),
-    bcc: Array.from(bccElements).map(el => el.getAttribute('data-hovercard-id') || ''),
-    from: fromElement?.value || '',
-    body: bodyText + '\n' + uetText,
+    // UETフィールドを取得 - 複数のセレクタを試行
+    const uetSelectors = [
+      '[name="uet"]',
+      '[data-name="uet"]'
+    ]
+    
+    let uetText = ''
+    for (const selector of uetSelectors) {
+      const uetElement = document.querySelector(selector) as HTMLInputElement | HTMLTextAreaElement
+      if (uetElement) {
+        uetText = uetElement.value || ''
+        break
+      }
+    }
+    
+    // メールアドレスのバリデーションと重複除去
+    const extractValidEmails = (elements: NodeList): string[] => {
+      return Array.from(elements)
+        .map(el => (el as Element).getAttribute('data-hovercard-id') || '')
+        .filter(email => email && isValidEmail(email))
+        .filter((email, index, array) => array.indexOf(email) === index) // 重複除去
+    }
+    
+    return {
+      to: extractValidEmails(toElements),
+      cc: extractValidEmails(ccElements),
+      bcc: extractValidEmails(bccElements),
+      from: fromElement?.value || '',
+      body: combineBodyText(bodyText, uetText),
+    }
+  } catch (error) {
+    console.warn('Error getting email addresses:', error)
+    return {
+      to: [],
+      cc: [],
+      bcc: [],
+      from: '',
+      body: '',
+    }
   }
+}
+
+function isValidEmail(email: string): boolean {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  return emailRegex.test(email)
+}
+
+function combineBodyText(bodyText: string, uetText: string): string {
+  const body = bodyText.trim()
+  const uet = uetText.trim()
+  
+  if (!body && !uet) {
+    return ''
+  }
+  
+  if (!body) {
+    return uet
+  }
+  
+  if (!uet) {
+    return body
+  }
+  
+  return `${body}\n${uet}`
 }
 
 export function extractDomainFromEmail(email: string): string {
@@ -49,18 +116,62 @@ export function getExternalDomains(recipients: string[], companyDomains: string[
   return externalDomains
 }
 
-export function getDomainsInBody(body: string, domains: Set<string>): Set<string> {
+export function getDomainsInBody(body: string, domains: Set<string>, companyDomains: string[] = []): Set<string> {
   const domainsInBody = new Set<string>()
   const bodyLower = body.toLowerCase()
+  const companyDomainsLower = companyDomains.map(d => d.toLowerCase())
   
   domains.forEach(domain => {
-    const emailDomainPattern = `@${domain.toLowerCase()}`
-    if (bodyLower.includes(emailDomainPattern)) {
-      domainsInBody.add(domain)
+    const domainLower = domain.toLowerCase()
+    
+    // 社内ドメインは本文チェック対象から除外
+    if (companyDomainsLower.includes(domainLower)) {
+      return
+    }
+    
+    // 1. @ドメイン形式での検索（最も一般的）
+    const emailPattern = `@${domainLower}`
+    if (bodyLower.includes(emailPattern)) {
+      const emailRegex = new RegExp(`@${escapeRegExp(domainLower)}(?![a-zA-Z0-9.-])`, 'i')
+      if (emailRegex.test(body)) {
+        domainsInBody.add(domain)
+        return
+      }
+    }
+    
+    // 2. URL形式での検索
+    const urlPatterns = [
+      `://${domainLower}`,      // https://domain.com
+      `www.${domainLower}`,     // www.domain.com
+    ]
+    
+    for (const pattern of urlPatterns) {
+      if (bodyLower.includes(pattern)) {
+        const urlRegex = new RegExp(`${escapeRegExp(pattern)}(?![a-zA-Z0-9.-])`, 'i')
+        if (urlRegex.test(body)) {
+          domainsInBody.add(domain)
+          return
+        }
+      }
+    }
+    
+    // 3. 単純なドメイン記載での検索（example.com そのもの）
+    if (bodyLower.includes(domainLower)) {
+      // 厳密なチェック: ドメインの前後が境界文字であることを確認
+      // 英数字、ピリオド、ハイフン以外の文字で区切られているか、文字列の開始/終了
+      const domainRegex = new RegExp(`(?<![a-zA-Z0-9.-])${escapeRegExp(domainLower)}(?![a-zA-Z0-9.-])`, 'i')
+      if (domainRegex.test(body)) {
+        domainsInBody.add(domain)
+        return
+      }
     }
   })
   
   return domainsInBody
+}
+
+function escapeRegExp(string: string): string {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
 export type WarningLevel = 'safe' | 'medium' | 'high'
@@ -99,6 +210,15 @@ export function analyzeEmailSecurity(
     }
   }
   
+  // 社内ドメインが設定されていない場合の警告
+  if (companyDomains.length === 0) {
+    return {
+      level: 'medium',
+      message: '社内ドメイン未設定',
+      detailMessage: '社内ドメインが設定されていません。拡張機能のポップアップから設定してください。'
+    }
+  }
+  
   const externalDomains = getExternalDomains(allRecipients, companyDomains)
   
   if (externalDomains.size === 0) {
@@ -110,8 +230,8 @@ export function analyzeEmailSecurity(
   }
   
   if (warningSettings.bodyCheckEnabled) {
-    // 厳格モード: 本文チェックを行う
-    const externalDomainsInBody = getDomainsInBody(emails.body, externalDomains)
+    // 厳格モード: 本文チェックを行う（社内ドメインは除外）
+    const externalDomainsInBody = getDomainsInBody(emails.body, externalDomains, companyDomains)
     const notInBodyDomains = new Set([...externalDomains].filter(d => !externalDomainsInBody.has(d)))
     
     if (notInBodyDomains.size > 0) {
