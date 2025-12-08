@@ -1,6 +1,6 @@
 {
   "name": "gmail-address-checker",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Gmail誤送信防止Chrome拡張機能",
   "main": "index.js",
   "scripts": {
