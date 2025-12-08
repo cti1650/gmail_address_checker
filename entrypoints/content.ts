@@ -194,6 +194,7 @@ async function analyzeAndShowRealtimeWarning(emails: EmailData) {
 
 let lastWarningState = '';
 let lastWarningLevel = '';
+let autoHideTimeout: NodeJS.Timeout | null = null;
 
 function showRealtimeWarning(message: string, emails: EmailData, warningLevel: string = 'medium') {
   // 更新が必要かチェック（レンダリング負荷軽減）
@@ -203,12 +204,28 @@ function showRealtimeWarning(message: string, emails: EmailData, warningLevel: s
   }
   lastWarningState = currentState;
   
+  // 既存のタイムアウトをクリア
+  if (autoHideTimeout) {
+    clearTimeout(autoHideTimeout);
+    autoHideTimeout = null;
+  }
+
   if (warningLevel === 'safe') {
-    // 安全時：小さなインジケーターのみ表示
-    showMinimizedIndicator(message);
+    // 安全時：小さなインジケーターのみ表示、10秒後に自動非表示
+    showMinimizedIndicator(message, warningLevel, emails);
+    hideExpandedPanel();
+    
+    // 10秒後に自動非表示
+    autoHideTimeout = setTimeout(() => {
+      hideMinimizedIndicator();
+      autoHideTimeout = null;
+    }, 10000);
+  } else if (warningLevel === 'medium') {
+    // 注意時：小さなインジケーターのみ表示（クリックで詳細展開）
+    showMinimizedIndicator(message, warningLevel, emails);
     hideExpandedPanel();
   } else {
-    // 警告時：拡張可能パネル表示
+    // 強い警告時：詳細パネルを即座に表示
     hideMinimizedIndicator();
     showExpandedPanel(message, emails, warningLevel);
   }
@@ -220,15 +237,58 @@ function hideRealtimeWarning() {
   lastWarningState = '';
 }
 
-function showMinimizedIndicator(message: string) {
+function showMinimizedIndicator(message: string, warningLevel: string, emails: EmailData) {
   let indicator = document.getElementById('gmail-safe-indicator');
   if (!indicator) {
     indicator = createMinimizedIndicator();
   }
   
-  const messageElement = indicator.querySelector('#safe-message');
+  // 警告レベルに応じたスタイル設定
+  let backgroundColor, borderColor, textColor, icon;
+  switch (warningLevel) {
+    case 'safe':
+      backgroundColor = '#e8f5e8';
+      borderColor = '#137333';
+      textColor = '#137333';
+      icon = '✓';
+      break;
+    case 'medium':
+      backgroundColor = '#fef7e0';
+      borderColor = '#fbbc04';
+      textColor = '#b06000';
+      icon = '⚠️';
+      break;
+    default:
+      backgroundColor = '#f1f3f4';
+      borderColor = '#dadce0';
+      textColor = '#5f6368';
+      icon = 'ℹ️';
+  }
+  
+  indicator.style.backgroundColor = backgroundColor;
+  indicator.style.borderColor = borderColor;
+  indicator.style.color = textColor;
+  
+  const iconElement = indicator.querySelector('#indicator-icon');
+  if (iconElement) {
+    iconElement.textContent = icon;
+  }
+  
+  const messageElement = indicator.querySelector('#indicator-message');
   if (messageElement) {
     messageElement.textContent = message;
+  }
+  
+  // 注意時のみクリック可能にする
+  if (warningLevel === 'medium') {
+    indicator.style.cursor = 'pointer';
+    indicator.onclick = () => {
+      hideMinimizedIndicator();
+      showExpandedPanel(message, emails, warningLevel);
+    };
+  } else {
+    indicator.style.cursor = 'default';
+    indicator.onclick = null;
   }
   
   indicator.style.display = 'block';
@@ -249,26 +309,37 @@ function createMinimizedIndicator(): HTMLElement {
     position: fixed;
     top: 20px;
     right: 20px;
-    background: #e8f5e8;
-    border: 1px solid #137333;
+    border: 1px solid;
     border-radius: 20px;
     padding: 8px 12px;
     font-family: 'Roboto', Arial, sans-serif;
     font-size: 12px;
-    color: #137333;
     z-index: 9998;
     box-shadow: 0 1px 3px rgba(0,0,0,0.1);
     display: none;
-    cursor: default;
     user-select: none;
+    transition: all 0.2s ease;
   `;
   
   indicator.innerHTML = `
     <div style="display: flex; align-items: center; gap: 5px;">
-      <span style="font-size: 14px;">✓</span>
-      <span id="safe-message"></span>
+      <span id="indicator-icon" style="font-size: 14px;"></span>
+      <span id="indicator-message"></span>
     </div>
   `;
+  
+  // ホバー効果を追加
+  indicator.addEventListener('mouseenter', () => {
+    if (indicator.style.cursor === 'pointer') {
+      indicator.style.transform = 'scale(1.05)';
+      indicator.style.boxShadow = '0 2px 8px rgba(0,0,0,0.2)';
+    }
+  });
+  
+  indicator.addEventListener('mouseleave', () => {
+    indicator.style.transform = 'scale(1)';
+    indicator.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
+  });
   
   document.body.appendChild(indicator);
   return indicator;
