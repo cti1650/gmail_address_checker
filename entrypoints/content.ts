@@ -219,14 +219,48 @@ async function analyzeAndShowRealtimeWarning(emails: EmailData) {
 let lastWarningState = '';
 let lastWarningLevel = '';
 let autoHideTimeout: NodeJS.Timeout | null = null;
+let lastIndicatorMessage = '';
+let lastDetailMessage = '';
+let lastEmails: EmailData | null = null;
+let isTemporarilySuppressed = false;
+let suppressTimeout: NodeJS.Timeout | null = null;
+let suppressedWarningLevel = '';
 
 function showRealtimeWarning(indicatorMessage: string, emails: EmailData, warningLevel: string = 'medium', detailMessage?: string) {
-  // 更新が必要かチェック（レンダリング負荷軽減）
-  const currentState = `${warningLevel}:${indicatorMessage}`;
-  if (currentState === lastWarningState) {
-    return;
+  let forceShow = false;
+  
+  // 一時的に抑制されている場合、警告レベルが変化したら抑制解除
+  if (isTemporarilySuppressed) {
+    console.log(`抑制中: 現在=${warningLevel}, 抑制レベル=${suppressedWarningLevel}`);
+    if (warningLevel !== suppressedWarningLevel) {
+      console.log('警告レベル変化 → 抑制解除');
+      clearSuppression();
+      forceShow = true; // 強制表示フラグ
+    } else {
+      console.log('同じ警告レベル → 抑制継続');
+      return;
+    }
   }
-  lastWarningState = currentState;
+  
+  // 強制表示でない場合のみ重複チェック
+  if (!forceShow) {
+    const currentState = `${warningLevel}:${indicatorMessage}`;
+    if (currentState === lastWarningState) {
+      return;
+    }
+    lastWarningState = currentState;
+  } else {
+    // 強制表示時は状態を更新
+    const currentState = `${warningLevel}:${indicatorMessage}`;
+    lastWarningState = currentState;
+    console.log('強制表示実行');
+  }
+  
+  // 最小化復帰用に現在の状態を保存
+  lastWarningLevel = warningLevel;
+  lastIndicatorMessage = indicatorMessage;
+  lastDetailMessage = detailMessage || indicatorMessage;
+  lastEmails = emails;
   
   // 既存のタイムアウトをクリア
   if (autoHideTimeout) {
@@ -259,6 +293,44 @@ function hideRealtimeWarning() {
   hideMinimizedIndicator();
   hideExpandedPanel();
   lastWarningState = '';
+}
+
+function temporarilySuppressWarning() {
+  // 現在の警告レベルを記録して抑制
+  suppressedWarningLevel = lastWarningLevel;
+  isTemporarilySuppressed = true;
+  hideMinimizedIndicator();
+  hideExpandedPanel();
+  
+  // 既存の抑制タイマーをクリア
+  if (suppressTimeout) {
+    clearTimeout(suppressTimeout);
+  }
+  
+  // 30秒後に抑制を解除
+  suppressTimeout = setTimeout(() => {
+    clearSuppression();
+  }, 30000);
+}
+
+function clearSuppression() {
+  console.log('抑制解除実行');
+  isTemporarilySuppressed = false;
+  suppressedWarningLevel = '';
+  // 抑制解除時は前回の状態をクリアして、次回確実に表示されるようにする
+  lastWarningState = '';
+  if (suppressTimeout) {
+    clearTimeout(suppressTimeout);
+    suppressTimeout = null;
+  }
+}
+
+function minimizeToIndicator() {
+  // 詳細パネルを非表示にして、インジケーターを表示
+  hideExpandedPanel();
+  if (lastEmails && lastWarningLevel === 'medium') {
+    showMinimizedIndicator(lastIndicatorMessage, lastWarningLevel, lastEmails, lastDetailMessage);
+  }
 }
 
 function showMinimizedIndicator(indicatorMessage: string, warningLevel: string, emails: EmailData, detailMessage?: string) {
@@ -423,6 +495,9 @@ function showExpandedPanel(message: string, emails: EmailData, warningLevel: str
     recipientsElement.innerHTML = recipientsList.join('<br>') || '送信先なし';
   }
   
+  // ボタンの表示を制御
+  updatePanelButtons(panel, warningLevel);
+  
   panel.style.display = 'block';
 }
 
@@ -475,12 +550,13 @@ function createExpandedPanel(): HTMLElement {
         <button id="minimize-panel" style="
           background: transparent;
           border: none;
-          font-size: 16px;
+          font-size: 14px;
           cursor: pointer;
           color: inherit;
           padding: 2px 5px;
           border-radius: 3px;
-        " title="最小化">−</button>
+          font-family: monospace;
+        " title="最小化（インジケーターに戻る）">＿</button>
         <button id="close-panel" style="
           background: transparent;
           border: none;
@@ -489,7 +565,7 @@ function createExpandedPanel(): HTMLElement {
           color: inherit;
           padding: 2px 5px;
           border-radius: 3px;
-        " title="閉じる">×</button>
+        " title="30秒間非表示">×</button>
       </div>
     </div>
     
@@ -506,15 +582,28 @@ function createExpandedPanel(): HTMLElement {
   
   // ボタンのイベントリスナー
   panel.querySelector('#close-panel')?.addEventListener('click', () => {
-    hideRealtimeWarning();
+    temporarilySuppressWarning();
   });
   
   panel.querySelector('#minimize-panel')?.addEventListener('click', () => {
-    hideExpandedPanel();
+    minimizeToIndicator();
   });
   
   document.body.appendChild(panel);
   return panel;
+}
+
+function updatePanelButtons(panel: HTMLElement, warningLevel: string) {
+  const minimizeBtn = panel.querySelector('#minimize-panel') as HTMLElement;
+  
+  // 注意レベル以外では最小化ボタンを非表示
+  if (minimizeBtn) {
+    if (warningLevel === 'medium') {
+      minimizeBtn.style.display = 'block';
+    } else {
+      minimizeBtn.style.display = 'none';
+    }
+  }
 }
 
 function makeDraggable(element: HTMLElement) {
