@@ -21,11 +21,12 @@ export default defineContentScript({
   },
 });
 
-interface EmailAddresses {
+interface EmailData {
   to: string[];
   cc: string[];
   bcc: string[];
   from: string;
+  body: string;
 }
 
 function checkComposeEmailAddresses() {
@@ -37,7 +38,7 @@ function checkComposeEmailAddresses() {
   }
 }
 
-function getEmailAddresses(): EmailAddresses {
+function getEmailAddresses(): EmailData {
   // To, CC, BCCのメールアドレスを取得
   const toElements = document.querySelectorAll('[aria-label=新規メッセージ] [name=to] [data-hovercard-id],form [aria-label=To] [data-hovercard-id]');
   const ccElements = document.querySelectorAll('[aria-label=新規メッセージ] [name=cc] [data-hovercard-id],form [aria-label=Cc] [data-hovercard-id]');
@@ -46,15 +47,20 @@ function getEmailAddresses(): EmailAddresses {
   // Fromアドレスを取得
   const fromElement = document.querySelector('input[name="from"]') as HTMLInputElement;
   
+  // メール本文を取得
+  const bodyElement = document.querySelector('[name="body"]') as HTMLInputElement | HTMLTextAreaElement;
+  const bodyText = bodyElement?.value || '';
+  
   return {
     to: Array.from(toElements).map(el => el.getAttribute('data-hovercard-id') || ''),
     cc: Array.from(ccElements).map(el => el.getAttribute('data-hovercard-id') || ''),
     bcc: Array.from(bccElements).map(el => el.getAttribute('data-hovercard-id') || ''),
-    from: fromElement?.value || ''
+    from: fromElement?.value || '',
+    body: bodyText
   };
 }
 
-async function analyzeAndShowRealtimeWarning(emails: EmailAddresses) {
+async function analyzeAndShowRealtimeWarning(emails: EmailData) {
   try {
     // 拡張機能が無効な場合は警告パネルを非表示にして終了
     const extensionEnabled = await extensionEnabledStorage.getValue();
@@ -80,6 +86,10 @@ async function analyzeAndShowRealtimeWarning(emails: EmailAddresses) {
     const internalDomains = new Set<string>();
     const externalDomains = new Set<string>();
     
+    // 外部ドメインを本文での言及状況で分類
+    const externalDomainsInBody = new Set<string>();
+    const externalDomainsNotInBody = new Set<string>();
+    
     allRecipients.forEach(email => {
       const domain = email.split('@')[1];
       if (domain) {
@@ -88,6 +98,12 @@ async function analyzeAndShowRealtimeWarning(emails: EmailAddresses) {
           internalDomains.add(domain);
         } else {
           externalDomains.add(domain);
+          // 本文チェックが有効な場合のみ本文を確認
+          if (warningSettings.enableBodyCheck && emails.body.toLowerCase().includes(domain.toLowerCase())) {
+            externalDomainsInBody.add(domain);
+          } else {
+            externalDomainsNotInBody.add(domain);
+          }
         }
       }
     });
@@ -102,19 +118,40 @@ async function analyzeAndShowRealtimeWarning(emails: EmailAddresses) {
       warningLevel = 'safe';
       warningMessage = `✓ すべて社内ドメインです (${internalDomains.size}ドメイン)`;
     } else {
-      // 条件2: 社外ドメインが1つ -> 注意
-      if (externalDomains.size === 1 && warningSettings.showForSingleExternal) {
-        warningLevel = 'medium';
-        warningsList.push(`⚠️ 社外ドメイン: ${Array.from(externalDomains)[0]}`);
+      // 本文に記載されていない外部ドメインは高リスク
+      const highRiskDomains = Array.from(externalDomainsNotInBody);
+      const lowRiskDomains = Array.from(externalDomainsInBody);
+      
+      // 本文チェックが有効かどうかで分岐
+      if (warningSettings.enableBodyCheck) {
+        // 条件2: 本文に言及されていない社外ドメイン -> 強い警告
+        if (highRiskDomains.length > 0 && warningSettings.showForSingleExternal) {
+          warningLevel = 'high';
+          warningsList.push(`🚨 本文に記載のない社外ドメイン: ${highRiskDomains.join(', ')}`);
+        }
+        
+        // 条件3: 本文に言及されている社外ドメイン -> 軽い注意
+        if (lowRiskDomains.length > 0 && warningSettings.showForSingleExternal) {
+          if (warningLevel !== 'high') {
+            warningLevel = 'medium';
+          }
+          warningsList.push(`📝 本文に記載済みの社外ドメイン: ${lowRiskDomains.join(', ')}`);
+        }
+      } else {
+        // 本文チェック無効時は従来通り
+        if (externalDomains.size === 1 && warningSettings.showForSingleExternal) {
+          warningLevel = 'medium';
+          warningsList.push(`⚠️ 社外ドメイン: ${Array.from(externalDomains)[0]}`);
+        }
       }
       
-      // 条件3: 社外ドメインが2つ以上 -> 強い警告
+      // 条件4: 複数の社外ドメイン -> 追加警告
       if (externalDomains.size >= 2 && warningSettings.showForMultipleExternal) {
         warningLevel = 'high';
-        warningsList.push(`🚨 複数の社外ドメイン: ${Array.from(externalDomains).join(', ')}`);
+        warningsList.push(`🔢 複数の社外ドメイン (${externalDomains.size}件)`);
       }
       
-      // 条件4: BCCに社外が入っている場合 -> 強い警告
+      // 条件5: BCCに社外が入っている場合 -> 強い警告
       const bccExternalDomains = emails.bcc
         .map(email => email.split('@')[1])
         .filter(domain => domain && !companyDomains.includes(domain));
@@ -124,13 +161,13 @@ async function analyzeAndShowRealtimeWarning(emails: EmailAddresses) {
         warningsList.push(`🚨 BCCに社外ドメイン`);
       }
       
-      // 条件5: スレッド内初登場チェック（簡易版）
+      // 条件6: スレッド内初登場チェック（簡易版）
       const isNewConversation = !document.querySelector('div[data-thread-id]');
       if (isNewConversation && externalDomains.size > 0 && warningSettings.showForNewConversation) {
         warningsList.push(`📧 新規メールに社外ドメイン`);
       }
       
-      // 条件6: FromとReply-toの不一致チェック（簡易版）
+      // 条件7: FromとReply-toの不一致チェック（簡易版）
       const fromDomain = emails.from.split('@')[1];
       if (fromDomain && companyDomains.includes(fromDomain)) {
         const replyToElements = document.querySelectorAll('input[name="replyto"]');
@@ -158,7 +195,7 @@ async function analyzeAndShowRealtimeWarning(emails: EmailAddresses) {
 let lastWarningState = '';
 let lastWarningLevel = '';
 
-function showRealtimeWarning(message: string, emails: EmailAddresses, warningLevel: string = 'medium') {
+function showRealtimeWarning(message: string, emails: EmailData, warningLevel: string = 'medium') {
   // 更新が必要かチェック（レンダリング負荷軽減）
   const currentState = `${warningLevel}:${message}`;
   if (currentState === lastWarningState) {
@@ -237,7 +274,7 @@ function createMinimizedIndicator(): HTMLElement {
   return indicator;
 }
 
-function showExpandedPanel(message: string, emails: EmailAddresses, warningLevel: string) {
+function showExpandedPanel(message: string, emails: EmailData, warningLevel: string) {
   let panel = document.getElementById('gmail-warning-panel');
   if (!panel) {
     panel = createExpandedPanel();

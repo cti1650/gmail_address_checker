@@ -22,11 +22,13 @@ async function loadSettings() {
     const multipleExternalCheckbox = document.getElementById('warn-multiple-external') as HTMLInputElement;
     const bccExternalCheckbox = document.getElementById('warn-bcc-external') as HTMLInputElement;
     const newConversationCheckbox = document.getElementById('warn-new-conversation') as HTMLInputElement;
+    const enableBodyCheckCheckbox = document.getElementById('enable-body-check') as HTMLInputElement;
     
     if (singleExternalCheckbox) singleExternalCheckbox.checked = warningSettings.showForSingleExternal;
     if (multipleExternalCheckbox) multipleExternalCheckbox.checked = warningSettings.showForMultipleExternal;
     if (bccExternalCheckbox) bccExternalCheckbox.checked = warningSettings.showForBccExternal;
     if (newConversationCheckbox) newConversationCheckbox.checked = warningSettings.showForNewConversation;
+    if (enableBodyCheckCheckbox) enableBodyCheckCheckbox.checked = warningSettings.enableBodyCheck;
   } catch (error) {
     console.error('設定の読み込みに失敗しました:', error);
   }
@@ -53,12 +55,14 @@ async function saveSettings() {
     const multipleExternalCheckbox = document.getElementById('warn-multiple-external') as HTMLInputElement;
     const bccExternalCheckbox = document.getElementById('warn-bcc-external') as HTMLInputElement;
     const newConversationCheckbox = document.getElementById('warn-new-conversation') as HTMLInputElement;
+    const enableBodyCheckCheckbox = document.getElementById('enable-body-check') as HTMLInputElement;
     
     await warningSettingsStorage.setValue({
       showForSingleExternal: singleExternalCheckbox?.checked ?? true,
       showForMultipleExternal: multipleExternalCheckbox?.checked ?? true,
       showForBccExternal: bccExternalCheckbox?.checked ?? true,
       showForNewConversation: newConversationCheckbox?.checked ?? true,
+      enableBodyCheck: enableBodyCheckCheckbox?.checked ?? true,
     });
     
     const statusDiv = document.getElementById('status');

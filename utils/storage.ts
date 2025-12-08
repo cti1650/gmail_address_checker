@@ -36,12 +36,14 @@ export const warningSettingsStorage = storage.defineItem<{
   showForMultipleExternal: boolean;
   showForBccExternal: boolean;
   showForNewConversation: boolean;
+  enableBodyCheck: boolean;
 }>("sync:warningSettings", {
   defaultValue: {
     showForSingleExternal: true,
     showForMultipleExternal: true,
     showForBccExternal: true,
     showForNewConversation: true,
+    enableBodyCheck: true,
   },
-  version: 1,
+  version: 2,
 });
