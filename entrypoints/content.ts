@@ -50,13 +50,17 @@ function getEmailAddresses(): EmailData {
   // メール本文を取得
   const bodyElement = document.querySelector('[name="body"]') as HTMLInputElement | HTMLTextAreaElement;
   const bodyText = bodyElement?.value || '';
+
+  // UETフィールドを取得
+  const uetElement = document.querySelector('[name="uet"]') as HTMLInputElement | HTMLTextAreaElement;
+  const uetText = uetElement?.value || '';
   
   return {
     to: Array.from(toElements).map(el => el.getAttribute('data-hovercard-id') || ''),
     cc: Array.from(ccElements).map(el => el.getAttribute('data-hovercard-id') || ''),
     bcc: Array.from(bccElements).map(el => el.getAttribute('data-hovercard-id') || ''),
     from: fromElement?.value || '',
-    body: bodyText
+    body: bodyText + '\n' + uetText,
   };
 }
 
