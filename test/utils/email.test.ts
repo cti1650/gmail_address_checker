@@ -526,4 +526,107 @@ describe('email utilities', () => {
       expect(result.detailMessage).toContain('拡張機能のポップアップから設定してください')
     })
   })
+
+  describe('multiple compose windows support', () => {
+    beforeEach(() => {
+      document.body.innerHTML = ''
+    })
+
+    it('複数のメール作成画面がある場合、最前面のものを取得する', () => {
+      // 最初のメール作成画面 (z-index: 1000)
+      const firstCompose = document.createElement('div')
+      firstCompose.setAttribute('aria-label', '新規メッセージ')
+      firstCompose.style.zIndex = '1000'
+      firstCompose.style.position = 'fixed'
+      firstCompose.style.display = 'block'
+      firstCompose.style.width = '500px'
+      firstCompose.style.height = '400px'
+      
+      const firstToContainer = document.createElement('div')
+      firstToContainer.setAttribute('name', 'to')
+      const firstToElement = document.createElement('span')
+      firstToElement.setAttribute('data-hovercard-id', 'first@example.com')
+      firstToContainer.appendChild(firstToElement)
+      firstCompose.appendChild(firstToContainer)
+
+      // 2番目のメール作成画面 (z-index: 2000, 最前面)
+      const secondCompose = document.createElement('div')
+      secondCompose.setAttribute('aria-label', '新規メッセージ')
+      secondCompose.style.zIndex = '2000'
+      secondCompose.style.position = 'fixed'
+      secondCompose.style.display = 'block'
+      secondCompose.style.width = '500px'
+      secondCompose.style.height = '400px'
+      
+      const secondToContainer = document.createElement('div')
+      secondToContainer.setAttribute('name', 'to')
+      const secondToElement = document.createElement('span')
+      secondToElement.setAttribute('data-hovercard-id', 'second@example.com')
+      secondToContainer.appendChild(secondToElement)
+      secondCompose.appendChild(secondToContainer)
+
+      document.body.appendChild(firstCompose)
+      document.body.appendChild(secondCompose)
+      
+      const result = getEmailAddresses()
+      
+      // 最前面（z-index が高い）のメール作成画面の情報が取得されることを確認
+      expect(result.to).toEqual(['second@example.com'])
+      expect(result.to).not.toContain('first@example.com')
+    })
+
+    it('非表示のメール作成画面は無視される', () => {
+      // 表示されているメール作成画面
+      const visibleCompose = document.createElement('div')
+      visibleCompose.setAttribute('aria-label', '新規メッセージ')
+      visibleCompose.style.display = 'block'
+      visibleCompose.style.width = '500px'
+      visibleCompose.style.height = '400px'
+      
+      const visibleToContainer = document.createElement('div')
+      visibleToContainer.setAttribute('name', 'to')
+      const visibleToElement = document.createElement('span')
+      visibleToElement.setAttribute('data-hovercard-id', 'visible@example.com')
+      visibleToContainer.appendChild(visibleToElement)
+      visibleCompose.appendChild(visibleToContainer)
+
+      // 非表示のメール作成画面
+      const hiddenCompose = document.createElement('div')
+      hiddenCompose.setAttribute('aria-label', '新規メッセージ')
+      hiddenCompose.style.display = 'none'
+      
+      const hiddenToContainer = document.createElement('div')
+      hiddenToContainer.setAttribute('name', 'to')
+      const hiddenToElement = document.createElement('span')
+      hiddenToElement.setAttribute('data-hovercard-id', 'hidden@example.com')
+      hiddenToContainer.appendChild(hiddenToElement)
+      hiddenCompose.appendChild(hiddenToContainer)
+
+      document.body.appendChild(visibleCompose)
+      document.body.appendChild(hiddenCompose)
+      
+      const result = getEmailAddresses()
+      
+      // 表示されているメール作成画面の情報のみが取得されることを確認
+      expect(result.to).toEqual(['visible@example.com'])
+      expect(result.to).not.toContain('hidden@example.com')
+    })
+
+    it('メール作成画面が見つからない場合は空のデータを返す', () => {
+      // メール作成に関連しない要素のみを配置
+      const nonComposeElement = document.createElement('div')
+      nonComposeElement.innerHTML = '<p>これはメール作成画面ではありません</p>'
+      document.body.appendChild(nonComposeElement)
+      
+      const result = getEmailAddresses()
+      
+      expect(result).toEqual({
+        to: [],
+        cc: [],
+        bcc: [],
+        from: '',
+        body: ''
+      })
+    })
+  })
 })
