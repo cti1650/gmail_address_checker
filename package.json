@@ -1,7 +1,7 @@
 {
   "name": "gmail-address-checker",
   "version": "0.0.3",
-  "description": "Gmail誤送信防止Chrome拡張機能",
+  "description": "Gmailで送信前に外部ドメインのメールアドレスをリアルタイムで警告表示する拡張機能",
   "main": "index.js",
   "scripts": {
     "dev": "wxt",
