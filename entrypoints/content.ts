@@ -55,97 +55,104 @@ function getEmailAddresses(): EmailAddresses {
 }
 
 async function analyzeAndShowRealtimeWarning(emails: EmailAddresses) {
-  // 拡張機能が無効な場合は警告パネルを非表示にして終了
-  const extensionEnabled = await extensionEnabledStorage.getValue();
-  if (!extensionEnabled) {
+  try {
+    // 拡張機能が無効な場合は警告パネルを非表示にして終了
+    const extensionEnabled = await extensionEnabledStorage.getValue();
+    if (!extensionEnabled) {
+      hideRealtimeWarning();
+      return;
+    }
+    
+    const allRecipients = [...emails.to, ...emails.cc, ...emails.bcc].filter(Boolean);
+    
+    // メールアドレスがない場合は警告パネルを非表示
+    if (allRecipients.length === 0) {
+      hideRealtimeWarning();
+      return;
+    }
+    
+    // 設定から社内ドメインと警告設定を取得
+    const companyDomains = await companyDomainsStorage.getValue();
+    const warningSettings = await warningSettingsStorage.getValue();
+    
+    // ドメイン分析
+    const domains = new Set<string>();
+    const internalDomains = new Set<string>();
+    const externalDomains = new Set<string>();
+    
+    allRecipients.forEach(email => {
+      const domain = email.split('@')[1];
+      if (domain) {
+        domains.add(domain);
+        if (companyDomains.includes(domain)) {
+          internalDomains.add(domain);
+        } else {
+          externalDomains.add(domain);
+        }
+      }
+    });
+    
+    // 警告レベルとメッセージを決定
+    let warningLevel = 'safe';
+    let warningMessage = '';
+    let warningsList: string[] = [];
+    
+    // 条件1: 社内ドメインのみ -> 安全
+    if (externalDomains.size === 0) {
+      warningLevel = 'safe';
+      warningMessage = `✓ すべて社内ドメインです (${internalDomains.size}ドメイン)`;
+    } else {
+      // 条件2: 社外ドメインが1つ -> 注意
+      if (externalDomains.size === 1 && warningSettings.showForSingleExternal) {
+        warningLevel = 'medium';
+        warningsList.push(`⚠️ 社外ドメイン: ${Array.from(externalDomains)[0]}`);
+      }
+      
+      // 条件3: 社外ドメインが2つ以上 -> 強い警告
+      if (externalDomains.size >= 2 && warningSettings.showForMultipleExternal) {
+        warningLevel = 'high';
+        warningsList.push(`🚨 複数の社外ドメイン: ${Array.from(externalDomains).join(', ')}`);
+      }
+      
+      // 条件4: BCCに社外が入っている場合 -> 強い警告
+      const bccExternalDomains = emails.bcc
+        .map(email => email.split('@')[1])
+        .filter(domain => domain && !companyDomains.includes(domain));
+      
+      if (bccExternalDomains.length > 0 && warningSettings.showForBccExternal) {
+        warningLevel = 'high';
+        warningsList.push(`🚨 BCCに社外ドメイン`);
+      }
+      
+      // 条件5: スレッド内初登場チェック（簡易版）
+      const isNewConversation = !document.querySelector('div[data-thread-id]');
+      if (isNewConversation && externalDomains.size > 0 && warningSettings.showForNewConversation) {
+        warningsList.push(`📧 新規メールに社外ドメイン`);
+      }
+      
+      // 条件6: FromとReply-toの不一致チェック（簡易版）
+      const fromDomain = emails.from.split('@')[1];
+      if (fromDomain && companyDomains.includes(fromDomain)) {
+        const replyToElements = document.querySelectorAll('input[name="replyto"]');
+        if (replyToElements.length > 0) {
+          warningsList.push(`↩️ Reply-to設定あり`);
+        }
+      }
+      
+      if (warningsList.length > 0) {
+        warningMessage = warningsList.join('<br>');
+      } else if (externalDomains.size > 0) {
+        warningMessage = `外部ドメイン ${externalDomains.size}件`;
+      }
+    }
+    
+    showRealtimeWarning(warningMessage, emails, warningLevel);
+  } catch (error) {
+    // Extension context invalidatedエラーなどを処理
+    console.log('拡張機能コンテキストエラー:', error);
     hideRealtimeWarning();
     return;
   }
-  
-  const allRecipients = [...emails.to, ...emails.cc, ...emails.bcc].filter(Boolean);
-  
-  // メールアドレスがない場合は警告パネルを非表示
-  if (allRecipients.length === 0) {
-    hideRealtimeWarning();
-    return;
-  }
-  
-  // 設定から社内ドメインと警告設定を取得
-  const companyDomains = await companyDomainsStorage.getValue();
-  const warningSettings = await warningSettingsStorage.getValue();
-  
-  // ドメイン分析
-  const domains = new Set<string>();
-  const internalDomains = new Set<string>();
-  const externalDomains = new Set<string>();
-  
-  allRecipients.forEach(email => {
-    const domain = email.split('@')[1];
-    if (domain) {
-      domains.add(domain);
-      if (companyDomains.includes(domain)) {
-        internalDomains.add(domain);
-      } else {
-        externalDomains.add(domain);
-      }
-    }
-  });
-  
-  // 警告レベルとメッセージを決定
-  let warningLevel = 'safe';
-  let warningMessage = '';
-  let warningsList: string[] = [];
-  
-  // 条件1: 社内ドメインのみ -> 安全
-  if (externalDomains.size === 0) {
-    warningLevel = 'safe';
-    warningMessage = `✓ すべて社内ドメインです (${internalDomains.size}ドメイン)`;
-  } else {
-    // 条件2: 社外ドメインが1つ -> 注意
-    if (externalDomains.size === 1 && warningSettings.showForSingleExternal) {
-      warningLevel = 'medium';
-      warningsList.push(`⚠️ 社外ドメイン: ${Array.from(externalDomains)[0]}`);
-    }
-    
-    // 条件3: 社外ドメインが2つ以上 -> 強い警告
-    if (externalDomains.size >= 2 && warningSettings.showForMultipleExternal) {
-      warningLevel = 'high';
-      warningsList.push(`🚨 複数の社外ドメイン: ${Array.from(externalDomains).join(', ')}`);
-    }
-    
-    // 条件4: BCCに社外が入っている場合 -> 強い警告
-    const bccExternalDomains = emails.bcc
-      .map(email => email.split('@')[1])
-      .filter(domain => domain && !companyDomains.includes(domain));
-    
-    if (bccExternalDomains.length > 0 && warningSettings.showForBccExternal) {
-      warningLevel = 'high';
-      warningsList.push(`🚨 BCCに社外ドメイン`);
-    }
-    
-    // 条件5: スレッド内初登場チェック（簡易版）
-    const isNewConversation = !document.querySelector('div[data-thread-id]');
-    if (isNewConversation && externalDomains.size > 0 && warningSettings.showForNewConversation) {
-      warningsList.push(`📧 新規メールに社外ドメイン`);
-    }
-    
-    // 条件6: FromとReply-toの不一致チェック（簡易版）
-    const fromDomain = emails.from.split('@')[1];
-    if (fromDomain && companyDomains.includes(fromDomain)) {
-      const replyToElements = document.querySelectorAll('input[name="replyto"]');
-      if (replyToElements.length > 0) {
-        warningsList.push(`↩️ Reply-to設定あり`);
-      }
-    }
-    
-    if (warningsList.length > 0) {
-      warningMessage = warningsList.join('<br>');
-    } else if (externalDomains.size > 0) {
-      warningMessage = `外部ドメイン ${externalDomains.size}件`;
-    }
-  }
-  
-  showRealtimeWarning(warningMessage, emails, warningLevel);
 }
 
 let lastWarningState = '';
