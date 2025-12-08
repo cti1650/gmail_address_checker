@@ -111,15 +111,23 @@ async function analyzeAndShowRealtimeWarning(emails: EmailData) {
     let detailMessage = '';
     
     if (externalDomains.size > 0) {
-      const notInBodyDomains = new Set([...externalDomains].filter(d => !externalDomainsInBody.has(d)));
-      
-      if (warningSettings.bodyCheckEnabled && notInBodyDomains.size > 0) {
-        // 本文に記載のない社外ドメインがある → 高警告
-        warningLevel = 'high';
-        warningMessage = `社外ドメイン ${externalDomains.size}件`;
-        detailMessage = `本文に記載のない社外ドメイン: ${Array.from(notInBodyDomains).join(', ')}`;
+      if (warningSettings.bodyCheckEnabled) {
+        // 厳格モード: 本文チェックを行う
+        const notInBodyDomains = new Set([...externalDomains].filter(d => !externalDomainsInBody.has(d)));
+        
+        if (notInBodyDomains.size > 0) {
+          // 本文に記載のない社外ドメインがある → 高警告
+          warningLevel = 'high';
+          warningMessage = `社外ドメイン ${externalDomains.size}件`;
+          detailMessage = `本文に記載のない社外ドメイン: ${Array.from(notInBodyDomains).join(', ')}`;
+        } else {
+          // すべて本文に記載済み → 注意
+          warningLevel = 'medium';
+          warningMessage = `社外ドメイン ${externalDomains.size}件`;
+          detailMessage = `本文に記載済みの社外ドメイン: ${Array.from(externalDomainsInBody).join(', ')}`;
+        }
       } else {
-        // 社外ドメインがあるが本文に記載済み → 注意
+        // 基本モード: 本文チェックなし、社外ドメインがあれば注意
         warningLevel = 'medium';
         warningMessage = `社外ドメイン ${externalDomains.size}件`;
         detailMessage = `社外ドメイン: ${Array.from(externalDomains).join(', ')}`;
@@ -176,8 +184,8 @@ async function showRealtimeWarning(indicatorMessage: string, emails: EmailData, 
     }
   }
   
-  // 重複チェック
-  const currentState = `${warningLevel}:${indicatorMessage}`;
+  // 重複チェック（本文の内容も含める）
+  const currentState = `${warningLevel}:${indicatorMessage}:${detailMessage}`;
   if (!forceShow && currentState === uiState.lastWarningState) {
     return;
   }
