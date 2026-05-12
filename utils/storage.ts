@@ -41,3 +41,12 @@ export const warningSettingsStorage = storage.defineItem<{
   },
   version: 4,
 });
+
+// 受信メールのリンクチェック有効/無効
+export const linkCheckEnabledStorage = storage.defineItem<boolean>(
+  "sync:linkCheckEnabled",
+  {
+    defaultValue: true,
+    version: 1,
+  }
+);

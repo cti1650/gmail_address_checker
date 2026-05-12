@@ -1,4 +1,4 @@
-import { companyDomainsStorage, extensionEnabledStorage, warningSettingsStorage } from '../../utils/storage';
+import { companyDomainsStorage, extensionEnabledStorage, linkCheckEnabledStorage, warningSettingsStorage } from '../../utils/storage';
 
 // 設定の読み込み
 async function loadSettings() {
@@ -6,17 +6,23 @@ async function loadSettings() {
     const companyDomains = await companyDomainsStorage.getValue();
     const extensionEnabled = await extensionEnabledStorage.getValue();
     const warningSettings = await warningSettingsStorage.getValue();
-    
+    const linkCheckEnabled = await linkCheckEnabledStorage.getValue();
+
     const input = document.getElementById('company-domains') as HTMLInputElement;
     if (input) {
       input.value = companyDomains.join(', ');
     }
-    
+
     const enabledCheckbox = document.getElementById('extension-enabled') as HTMLInputElement;
     if (enabledCheckbox) {
       enabledCheckbox.checked = extensionEnabled;
     }
-    
+
+    const linkCheckCheckbox = document.getElementById('link-check-enabled') as HTMLInputElement;
+    if (linkCheckCheckbox) {
+      linkCheckCheckbox.checked = linkCheckEnabled;
+    }
+
     // 警告レベルのラジオボタン
     const warningLevelRadios = document.querySelectorAll('input[name="warning-level"]') as NodeListOf<HTMLInputElement>;
     warningLevelRadios.forEach(radio => {
@@ -42,7 +48,12 @@ async function saveSettings() {
     if (enabledCheckbox) {
       await extensionEnabledStorage.setValue(enabledCheckbox.checked);
     }
-    
+
+    const linkCheckCheckbox = document.getElementById('link-check-enabled') as HTMLInputElement;
+    if (linkCheckCheckbox) {
+      await linkCheckEnabledStorage.setValue(linkCheckCheckbox.checked);
+    }
+
     // 警告設定の保存
     const selectedWarningLevel = document.querySelector('input[name="warning-level"]:checked') as HTMLInputElement;
     const warningLevel = selectedWarningLevel?.value || 'strict';
