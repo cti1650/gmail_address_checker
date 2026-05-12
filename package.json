@@ -1,6 +1,6 @@
 {
   "name": "gmail-address-checker",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "Gmailで送信前に外部ドメインのメールアドレスをリアルタイムで警告表示する拡張機能",
   "main": "index.js",
   "scripts": {
@@ -33,6 +33,7 @@
   "dependencies": {
     "@wxt-dev/auto-icons": "^1.1.0",
     "@wxt-dev/storage": "^1.2.6",
+    "tldts": "^7.0.30",
     "wxt": "^0.20.11"
   },
   "volta": {
