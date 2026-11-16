@@ -146,7 +146,7 @@ function setupHoverListeners(ctx: ContentScriptContext): void {
 export function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => {
     const map: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }
-    return map[c]
+    return map[c] ?? c
   })
 }
 

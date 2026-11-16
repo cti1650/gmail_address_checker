@@ -266,7 +266,14 @@ npm run zip:firefox
 
 ## 🔄 更新履歴
 
-### v0.1.0（最新版）
+### v0.1.1（最新版）
+
+- 🔒 **依存パッケージの脆弱性対応**
+  - `npm audit` の指摘を 30 件から 4 件（low、開発時ツールのみ）に削減
+  - wxt を 0.21 系、vitest / happy-dom を最新版に更新（vite・web-ext を devDependencies に追加）
+  - wxt 0.21 の `noUncheckedIndexedAccess` に合わせて配列アクセスの型を修正（動作変更なし）
+
+### v0.1.0
 
 - 🛡️ **受信メールのリンクチェック機能を追加**
   - 危険プロトコル (`javascript:` / `data:` / `vbscript:` / `file:` 等) の検知

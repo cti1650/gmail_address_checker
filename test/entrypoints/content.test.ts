@@ -48,7 +48,7 @@ describe('content script', () => {
 
       const elements = document.querySelectorAll('[aria-label=新規メッセージ] [name=to] [data-hovercard-id]')
       expect(elements.length).toBe(1)
-      expect(elements[0].getAttribute('data-hovercard-id')).toBe('user@external.com')
+      expect(elements[0]?.getAttribute('data-hovercard-id')).toBe('user@external.com')
     })
 
     it('CC要素からメールアドレスを取得する', () => {
@@ -67,7 +67,7 @@ describe('content script', () => {
 
       const elements = document.querySelectorAll('[aria-label=新規メッセージ] [name=cc] [data-hovercard-id]')
       expect(elements.length).toBe(1)
-      expect(elements[0].getAttribute('data-hovercard-id')).toBe('cc@external.com')
+      expect(elements[0]?.getAttribute('data-hovercard-id')).toBe('cc@external.com')
     })
 
     it('BCC要素からメールアドレスを取得する', () => {
@@ -86,7 +86,7 @@ describe('content script', () => {
 
       const elements = document.querySelectorAll('[aria-label=新規メッセージ] [name=bcc] [data-hovercard-id]')
       expect(elements.length).toBe(1)
-      expect(elements[0].getAttribute('data-hovercard-id')).toBe('bcc@external.com')
+      expect(elements[0]?.getAttribute('data-hovercard-id')).toBe('bcc@external.com')
     })
 
     it('From要素からメールアドレスを取得する', () => {
