@@ -207,10 +207,12 @@ export function extractDomainFromEmail(email: string): string {
 
 export function getExternalDomains(recipients: string[], companyDomains: string[]): Set<string> {
   const externalDomains = new Set<string>()
+  // ドメインは大文字小文字を区別しないため小文字で比較する
+  const companyDomainsLower = companyDomains.map(d => d.toLowerCase())
   
   recipients.forEach(email => {
-    const domain = extractDomainFromEmail(email)
-    if (domain && !companyDomains.includes(domain)) {
+    const domain = extractDomainFromEmail(email).toLowerCase()
+    if (domain && !companyDomainsLower.includes(domain)) {
       externalDomains.add(domain)
     }
   })

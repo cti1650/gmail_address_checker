@@ -34,3 +34,28 @@ export function resolveCompanyDomains(policy: ManagedPolicy, userDomains: string
   const user = policy.allowUserDomains === false ? [] : userDomains
   return mergeCompanyDomains(policy.companyDomains, user)
 }
+
+export interface WarningSettings {
+  warningLevel: WarningLevel
+  bodyCheckEnabled: boolean
+}
+
+// 判定に使う設定値（ユーザー設定とポリシーの両方で同じ形）
+export interface Settings {
+  companyDomains: string[]
+  extensionEnabled: boolean
+  linkCheckEnabled: boolean
+  warningSettings: WarningSettings
+}
+
+// ポリシーで配布された項目はユーザー設定より優先する
+export function resolveEffectiveSettings(policy: ManagedPolicy, user: Settings): Settings {
+  return {
+    companyDomains: resolveCompanyDomains(policy, user.companyDomains),
+    extensionEnabled: policy.extensionEnabled ?? user.extensionEnabled,
+    linkCheckEnabled: policy.linkCheckEnabled ?? user.linkCheckEnabled,
+    warningSettings: policy.warningLevel
+      ? { warningLevel: policy.warningLevel, bodyCheckEnabled: policy.warningLevel === 'strict' }
+      : user.warningSettings,
+  }
+}

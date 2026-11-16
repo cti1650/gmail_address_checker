@@ -1,5 +1,6 @@
 import { storage } from "@wxt-dev/storage";
-import { parseManagedPolicy, resolveCompanyDomains, type ManagedPolicy, type WarningLevel } from "./managed-policy";
+import { browser } from "wxt/browser";
+import { parseManagedPolicy, resolveEffectiveSettings, type ManagedPolicy, type Settings, type WarningSettings } from "./managed-policy";
 
 // 社内ドメインの設定を管理
 export const companyDomainsStorage = storage.defineItem<string[]>(
@@ -32,10 +33,7 @@ export const extensionEnabledStorage = storage.defineItem<boolean>(
 );
 
 // 警告表示設定（簡素化）
-export const warningSettingsStorage = storage.defineItem<{
-  warningLevel: WarningLevel;
-  bodyCheckEnabled: boolean;
-}>("sync:warningSettings", {
+export const warningSettingsStorage = storage.defineItem<WarningSettings>("sync:warningSettings", {
   defaultValue: {
     warningLevel: 'strict',
     bodyCheckEnabled: true,
@@ -75,27 +73,44 @@ export async function getManagedPolicy(): Promise<ManagedPolicy> {
   }
 }
 
-// 以下はポリシーで配布された値を優先した、判定に使う設定値
-
-export async function getEffectiveCompanyDomains(): Promise<string[]> {
-  const [policy, user] = await Promise.all([getManagedPolicy(), companyDomainsStorage.getValue()]);
-  return resolveCompanyDomains(policy, user);
+// 判定に使う設定値（ポリシーで配布された項目はユーザー設定より優先）
+async function loadEffectiveSettings(): Promise<Settings> {
+  const [policy, companyDomains, extensionEnabled, linkCheckEnabled, warningSettings] = await Promise.all([
+    getManagedPolicy(),
+    companyDomainsStorage.getValue(),
+    extensionEnabledStorage.getValue(),
+    linkCheckEnabledStorage.getValue(),
+    warningSettingsStorage.getValue(),
+  ]);
+  return resolveEffectiveSettings(policy, { companyDomains, extensionEnabled, linkCheckEnabled, warningSettings });
 }
 
-export async function getEffectiveExtensionEnabled(): Promise<boolean> {
-  const policy = await getManagedPolicy();
-  return policy.extensionEnabled ?? (await extensionEnabledStorage.getValue());
-}
+// watchSettingsChanges() で変更監視中のみキャッシュする（監視なしでは毎回読み込む）
+let settingsCache: Promise<Settings> | null = null;
+let cacheEnabled = false;
 
-export async function getEffectiveLinkCheckEnabled(): Promise<boolean> {
-  const policy = await getManagedPolicy();
-  return policy.linkCheckEnabled ?? (await linkCheckEnabledStorage.getValue());
-}
-
-export async function getEffectiveWarningSettings(): Promise<{ warningLevel: WarningLevel; bodyCheckEnabled: boolean }> {
-  const policy = await getManagedPolicy();
-  if (policy.warningLevel) {
-    return { warningLevel: policy.warningLevel, bodyCheckEnabled: policy.warningLevel === "strict" };
+export function getEffectiveSettings(): Promise<Settings> {
+  if (!cacheEnabled) return loadEffectiveSettings();
+  if (!settingsCache) {
+    const loading = loadEffectiveSettings();
+    settingsCache = loading;
+    loading.catch(() => {
+      if (settingsCache === loading) settingsCache = null;
+    });
   }
-  return warningSettingsStorage.getValue();
+  return settingsCache;
+}
+
+// ストレージ（local / sync / managed）の変更でキャッシュを破棄する。戻り値は監視の解除関数
+export function watchSettingsChanges(): () => void {
+  const listener = () => {
+    settingsCache = null;
+  };
+  cacheEnabled = true;
+  browser.storage.onChanged.addListener(listener);
+  return () => {
+    browser.storage.onChanged.removeListener(listener);
+    cacheEnabled = false;
+    settingsCache = null;
+  };
 }

@@ -52,6 +52,14 @@ describe('email utilities', () => {
       expect(result.size).toBe(2)
     })
 
+    it('大文字小文字の違いを無視して社内ドメインを判定する', () => {
+      const result = getExternalDomains(['user@Company.COM', 'ext@Gmail.com'], ['COMPANY.com'])
+
+      expect(result.has('company.com')).toBe(false)
+      expect(result.has('gmail.com')).toBe(true)
+      expect(result.size).toBe(1)
+    })
+
     it('すべて社内ドメインの場合は空のSetを返す', () => {
       const recipients = [
         'user1@company.com',

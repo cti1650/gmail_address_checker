@@ -78,7 +78,7 @@ async function saveSettings() {
     if (input && policy.allowUserDomains !== false) {
       const domains = input.value
         .split(',')
-        .map(domain => domain.trim())
+        .map(domain => domain.trim().toLowerCase())
         .filter(domain => domain.length > 0);
 
       await companyDomainsStorage.setValue(domains);
