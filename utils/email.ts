@@ -52,7 +52,7 @@ function getActiveComposeWindow(): Element | null {
   }
   
   if (composeWindows.length === 1) {
-    return composeWindows[0]
+    return composeWindows[0] ?? null
   }
   
   // 複数のメール作成画面がある場合、最前面のものを特定
@@ -76,7 +76,7 @@ function getTopMostComposeWindow(composeWindows: Element[]): Element | null {
   }
   
   if (visibleWindows.length === 1) {
-    return visibleWindows[0]
+    return visibleWindows[0] ?? null
   }
   
   // z-indexでソート（高い順）
@@ -100,7 +100,7 @@ function getTopMostComposeWindow(composeWindows: Element[]): Element | null {
     return bPosition - aPosition
   })
   
-  return sortedByZIndex[0]
+  return sortedByZIndex[0] ?? null
 }
 
 function getEmailAddressesLegacy(): EmailData {

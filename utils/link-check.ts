@@ -26,7 +26,7 @@ export function extractHostsFromText(text: string): string[] {
   URL_PATTERN.lastIndex = 0
   let m: RegExpExecArray | null
   while ((m = URL_PATTERN.exec(text)) !== null) {
-    hosts.push(m[1].toLowerCase())
+    if (m[1]) hosts.push(m[1].toLowerCase())
   }
   return hosts
 }
