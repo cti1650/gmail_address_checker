@@ -25,6 +25,20 @@ npm test             # ウォッチモード
 npm run typecheck    # 型チェック
 ```
 
+Gmail の画面を使うテストは、[test/fixtures/gmail.ts](../test/fixtures/gmail.ts) の再現データで DOM を組み立てます。実際の Gmail の画面から、拡張機能が依存する属性だけを残して簡略化したものです。
+
+```ts
+import { composeWindow, receivedMessage, render } from '../fixtures/gmail'
+
+// 作成画面（最小化・全画面表示・件名入り・返信欄なども引数で再現できる）
+render(composeWindow({ to: ['a@partner.com'], body: '資料を送ります', minimized: true }))
+
+// 閲覧画面で開いた受信メール
+render(receivedMessage({ from: 'sender@example.com', links: [{ href: 'https://evil.test/', text: 'https://example.com' }] }))
+```
+
+Gmail の画面構造が変わったときは、まずこの再現データを実際の構造に合わせて直し、テストが落ちることを確かめてから実装を直してください。
+
 ## ビルド・配布
 
 ```bash
@@ -105,7 +119,10 @@ utils/
   company-domains.ts  # ポリシー配布分とユーザー設定分の社内ドメイン合算
 public/
   managed_schema.json # 組織ポリシー (chrome.storage.managed) のスキーマ
-test/                 # Vitest のテスト
+test/
+  fixtures/gmail.ts   # Gmail の DOM の再現データ
+  features/           # 送信時チェック・受信時チェックを実際に通すテスト
+  utils/              # 判定ロジックのテスト
 ```
 
 ## 実装上の工夫
@@ -116,7 +133,7 @@ test/                 # Vitest のテスト
 - **再判定の抑制**: チェック済みのリンクには `data-gmail-link-checked` 属性にチェック時の `href` を記録し、`href` が変わったときだけ再判定する
 - **ドメインの比較**: 社内ドメインと宛先のドメインは小文字にそろえて比較する
 - **Gmail の DOM への依存**: `name`、`data-compose-id`、`data-message-id`、`email`、`role`、`contenteditable` などの属性だけを使う。`.a3s` のような短縮クラス名はビルドごとに変わりうるため使わない
-- **作成画面ごとの判定**: 宛先欄から作成画面の範囲（`[data-compose-id]`、なければフォームの親要素）をたどり、範囲ごとに宛先・本文を取り出して判定する。テスト用の DOM は [test/utils/compose.test.ts](../test/utils/compose.test.ts) にある
+- **作成画面ごとの判定**: 宛先欄から作成画面の範囲（`[data-compose-id]`、なければフォームの親要素）をたどり、範囲ごとに宛先・本文を取り出して判定する
 - **リソースの自動解放**: `setTimeout` / `setInterval` / `addEventListener` / MutationObserver はすべて WXT の `ContentScriptContext` 経由で登録し、拡張機能のリロード時に自動で解放する
 - **ツールチップの配置**: `position: fixed` で `document.body` 直下に置き、Gmail の `overflow: hidden` なコンテナで切れないようにしている
 - **エラー処理**: 拡張機能の更新時に起きる "Extension context invalidated" に対応
