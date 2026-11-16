@@ -84,7 +84,7 @@ flowchart LR
     LC -- 読み取り --> MS
 ```
 
-設定の読み書きは [utils/storage.ts](../utils/storage.ts) に集約しています。判定処理は `getEffective*` 関数を通して設定を読み、組織ポリシーで配布された項目はユーザー設定より優先されます。
+設定の読み書きは [utils/storage.ts](../utils/storage.ts) に集約しています。判定処理は `getEffectiveSettings()` を通して設定を読み、組織ポリシーで配布された項目はユーザー設定より優先されます。
 
 ### ディレクトリ構成
 
@@ -101,6 +101,7 @@ utils/
   ui.ts               # 共通 UI ヘルパー
   storage.ts          # 設定の永続化定義 (組織ポリシー配布分の読み込みを含む)
   managed-policy.ts   # 組織ポリシーの検証と、ポリシー優先の設定値の解決 (純関数)
+  scan-scheduler.ts   # DOM 変更で走るチェックの間引きと同時実行防止
   company-domains.ts  # ポリシー配布分とユーザー設定分の社内ドメイン合算
 public/
   managed_schema.json # 組織ポリシー (chrome.storage.managed) のスキーマ
@@ -109,8 +110,11 @@ test/                 # Vitest のテスト
 
 ## 実装上の工夫
 
+- **チェックの間引き**: DOM 変更のたびに走るチェックは [utils/scan-scheduler.ts](../utils/scan-scheduler.ts) で 0.3 秒に 1 回までにまとめ、送信時チェックとリンクチェックを別々にスケジュールする。実行中のチェックとは重ならないため、古い判定結果で表示が上書きされない
+- **設定のキャッシュ**: 判定に使う設定は `getEffectiveSettings()` でまとめて読み込んでキャッシュし、`storage.onChanged`（組織ポリシーの変更を含む）で破棄する
 - **状態の一元管理**: 送信時チェックの表示状態は UIState オブジェクトで管理し、状態が変わったときだけ UI を更新する
-- **再判定の抑制**: チェック済みのリンクには `data-gmail-link-checked` 属性を付け、再スキャンしない
+- **再判定の抑制**: チェック済みのリンクには `data-gmail-link-checked` 属性にチェック時の `href` を記録し、`href` が変わったときだけ再判定する
+- **ドメインの比較**: 社内ドメインと宛先のドメインは小文字にそろえて比較する
 - **リソースの自動解放**: `setTimeout` / `setInterval` / `addEventListener` / MutationObserver はすべて WXT の `ContentScriptContext` 経由で登録し、拡張機能のリロード時に自動で解放する
 - **ツールチップの配置**: `position: fixed` で `document.body` 直下に置き、Gmail の `overflow: hidden` なコンテナで切れないようにしている
 - **エラー処理**: 拡張機能の更新時に起きる "Extension context invalidated" に対応

@@ -1,5 +1,5 @@
 import type { ContentScriptContext } from 'wxt/utils/content-script-context'
-import { getEffectiveExtensionEnabled, getEffectiveLinkCheckEnabled } from '../utils/storage'
+import { getEffectiveSettings } from '../utils/storage'
 import { checkLink, type LinkCheckResult } from '../utils/link-check'
 
 const LINK_CHECKED_ATTR = 'data-gmail-link-checked'
@@ -14,9 +14,8 @@ const TOOLTIP_ELEMENT_ID = 'gmail-link-flag-tooltip'
 // 受信メール内のリンクスキャン (毎tick呼び出し)
 export async function scanLinks(): Promise<void> {
   try {
-    const enabled = await getEffectiveLinkCheckEnabled()
-    const extensionEnabled = await getEffectiveExtensionEnabled()
-    if (!enabled || !extensionEnabled) {
+    const settings = await getEffectiveSettings()
+    if (!settings.linkCheckEnabled || !settings.extensionEnabled) {
       unmarkAllLinks()
       return
     }
@@ -30,8 +29,11 @@ export async function scanLinks(): Promise<void> {
       const bodyScope = message.querySelector('[vlink]') ?? message
       const anchors = bodyScope.querySelectorAll<HTMLAnchorElement>('a[href]')
       anchors.forEach((anchor) => {
-        if (anchor.getAttribute(LINK_CHECKED_ATTR) === '1') return
-        anchor.setAttribute(LINK_CHECKED_ATTR, '1')
+        // チェック時の href を記録し、Gmail が href を書き換えた場合は再判定する
+        const href = anchor.getAttribute('href') || ''
+        if (anchor.getAttribute(LINK_CHECKED_ATTR) === href) return
+        anchor.setAttribute(LINK_CHECKED_ATTR, href)
+        unflagLink(anchor)
 
         const result = checkLink(anchor, relatedDomains)
         if (result.type) {
@@ -225,14 +227,16 @@ function flagLink(anchor: HTMLAnchorElement, result: LinkCheckResult): void {
   }
 }
 
+function unflagLink(anchor: HTMLAnchorElement): void {
+  anchor.removeAttribute(LINK_FLAGGED_ATTR)
+  anchor.removeAttribute(LINK_HREF_HOST_ATTR)
+  anchor.removeAttribute(LINK_DISPLAY_HOST_ATTR)
+  anchor.removeAttribute(LINK_RELATED_ATTR)
+  anchor.removeAttribute(LINK_PROTOCOL_ATTR)
+}
+
 function unmarkAllLinks(): void {
-  document.querySelectorAll<HTMLAnchorElement>(`a[${LINK_FLAGGED_ATTR}]`).forEach((a) => {
-    a.removeAttribute(LINK_FLAGGED_ATTR)
-    a.removeAttribute(LINK_HREF_HOST_ATTR)
-    a.removeAttribute(LINK_DISPLAY_HOST_ATTR)
-    a.removeAttribute(LINK_RELATED_ATTR)
-    a.removeAttribute(LINK_PROTOCOL_ATTR)
-  })
+  document.querySelectorAll<HTMLAnchorElement>(`a[${LINK_FLAGGED_ATTR}]`).forEach(unflagLink)
   document.querySelectorAll<HTMLAnchorElement>(`a[${LINK_CHECKED_ATTR}]`).forEach((a) => {
     a.removeAttribute(LINK_CHECKED_ATTR)
   })
@@ -242,6 +246,7 @@ function unmarkAllLinks(): void {
 // テスト用エクスポート
 export const __testing = {
   collectRelatedDomains,
+  LINK_CHECKED_ATTR,
   flagLink,
   unmarkAllLinks,
   LINK_FLAGGED_ATTR,

@@ -1,5 +1,5 @@
 import type { ContentScriptContext } from 'wxt/utils/content-script-context'
-import { getEffectiveCompanyDomains, getEffectiveExtensionEnabled, getEffectiveWarningSettings } from '../utils/storage'
+import { getEffectiveSettings } from '../utils/storage'
 import { getEmailAddresses, analyzeEmailSecurity, setsEqual, getExternalDomains, type EmailData } from '../utils/email'
 import {
   getWarningStyles,
@@ -44,7 +44,7 @@ const uiState: UIState = {
 let activeCtx: ContentScriptContext | null = null
 
 // 初期化: ctx を保持し scan を返す
-export function setupSendCheck(ctx: ContentScriptContext): { scan: () => void } {
+export function setupSendCheck(ctx: ContentScriptContext): { scan: () => Promise<void> } {
   activeCtx = ctx
   ctx.onInvalidated(() => {
     activeCtx = null
@@ -57,19 +57,22 @@ function scheduleTimeout(handler: () => void, ms: number): number {
   return activeCtx ? activeCtx.setTimeout(handler, ms) : window.setTimeout(handler, ms)
 }
 
-function scanCompose(): void {
+// 判定完了まで待てるよう Promise を返す（スケジューラが同時実行を防ぎ、古い結果での上書きを避ける）
+async function scanCompose(): Promise<void> {
+  let emails: EmailData
   try {
-    const emails = getEmailAddresses()
-    void analyzeAndShowRealtimeWarning(emails)
+    emails = getEmailAddresses()
   } catch (error) {
     console.log('メールアドレス取得エラー:', error)
+    return
   }
+  await analyzeAndShowRealtimeWarning(emails)
 }
 
 async function analyzeAndShowRealtimeWarning(emails: EmailData): Promise<void> {
   try {
-    const extensionEnabled = await getEffectiveExtensionEnabled()
-    if (!extensionEnabled) {
+    const settings = await getEffectiveSettings()
+    if (!settings.extensionEnabled) {
       hideRealtimeWarning()
       return
     }
@@ -80,10 +83,7 @@ async function analyzeAndShowRealtimeWarning(emails: EmailData): Promise<void> {
       return
     }
 
-    const companyDomains = await getEffectiveCompanyDomains()
-    const warningSettings = await getEffectiveWarningSettings()
-
-    const result = analyzeEmailSecurity(emails, companyDomains, warningSettings)
+    const result = analyzeEmailSecurity(emails, settings.companyDomains, settings.warningSettings)
 
     await showRealtimeWarning(result.message, emails, result.level, result.detailMessage)
   } catch (error) {
@@ -281,7 +281,7 @@ function updatePanelButtons(panel: HTMLElement, warningLevel: string): void {
 // 外部ドメインを取得するヘルパー
 async function getCurrentExternalDomains(emails: EmailData): Promise<Set<string>> {
   try {
-    const companyDomains = await getEffectiveCompanyDomains()
+    const { companyDomains } = await getEffectiveSettings()
     const allRecipients = [...emails.to, ...emails.cc, ...emails.bcc].filter(Boolean)
     return getExternalDomains(allRecipients, companyDomains)
   } catch (error) {
