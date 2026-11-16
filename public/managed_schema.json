@@ -1,0 +1,32 @@
+{
+  "type": "object",
+  "properties": {
+    "companyDomains": {
+      "title": "社内ドメイン",
+      "description": "社内として扱うメールドメインの一覧。allowUserDomains が false でなければ、ユーザーが設定したドメインと合算して判定されます。",
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "allowUserDomains": {
+      "title": "ユーザーによる社内ドメインの追加を許可",
+      "description": "false の場合、ユーザーが設定した社内ドメインは使わず、companyDomains のみで判定します。",
+      "type": "boolean"
+    },
+    "warningLevel": {
+      "title": "警告レベル",
+      "description": "指定した場合、警告レベルをこの値に固定します（off / basic / strict）。",
+      "type": "string",
+      "enum": ["off", "basic", "strict"]
+    },
+    "extensionEnabled": {
+      "title": "拡張機能の有効 / 無効",
+      "description": "指定した場合、拡張機能の有効 / 無効をこの値に固定します。",
+      "type": "boolean"
+    },
+    "linkCheckEnabled": {
+      "title": "受信メールのリンクチェック",
+      "description": "指定した場合、リンクチェックの有効 / 無効をこの値に固定します。",
+      "type": "boolean"
+    }
+  }
+}

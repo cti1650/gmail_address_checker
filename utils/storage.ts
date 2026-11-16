@@ -1,4 +1,5 @@
 import { storage } from "@wxt-dev/storage";
+import { parseManagedPolicy, resolveCompanyDomains, type ManagedPolicy, type WarningLevel } from "./managed-policy";
 
 // 社内ドメインの設定を管理
 export const companyDomainsStorage = storage.defineItem<string[]>(
@@ -32,7 +33,7 @@ export const extensionEnabledStorage = storage.defineItem<boolean>(
 
 // 警告表示設定（簡素化）
 export const warningSettingsStorage = storage.defineItem<{
-  warningLevel: 'off' | 'basic' | 'strict';
+  warningLevel: WarningLevel;
   bodyCheckEnabled: boolean;
 }>("sync:warningSettings", {
   defaultValue: {
@@ -50,3 +51,51 @@ export const linkCheckEnabledStorage = storage.defineItem<boolean>(
     version: 1,
   }
 );
+
+// 組織ポリシー（Google Workspace / Chrome Enterprise）で配布される設定（読み取り専用）
+const MANAGED_KEYS = [
+  "companyDomains",
+  "allowUserDomains",
+  "warningLevel",
+  "extensionEnabled",
+  "linkCheckEnabled",
+] as const;
+
+// managed storage 非対応環境（Firefox等）やポリシー未配布時は、すべて未配布として扱う
+export async function getManagedPolicy(): Promise<ManagedPolicy> {
+  try {
+    const items = await storage.getItems(MANAGED_KEYS.map((key) => `managed:${key}` as const));
+    const raw: Record<string, unknown> = {};
+    items.forEach(({ key, value }) => {
+      raw[key.replace(/^managed:/, "")] = value;
+    });
+    return parseManagedPolicy(raw);
+  } catch {
+    return parseManagedPolicy({});
+  }
+}
+
+// 以下はポリシーで配布された値を優先した、判定に使う設定値
+
+export async function getEffectiveCompanyDomains(): Promise<string[]> {
+  const [policy, user] = await Promise.all([getManagedPolicy(), companyDomainsStorage.getValue()]);
+  return resolveCompanyDomains(policy, user);
+}
+
+export async function getEffectiveExtensionEnabled(): Promise<boolean> {
+  const policy = await getManagedPolicy();
+  return policy.extensionEnabled ?? (await extensionEnabledStorage.getValue());
+}
+
+export async function getEffectiveLinkCheckEnabled(): Promise<boolean> {
+  const policy = await getManagedPolicy();
+  return policy.linkCheckEnabled ?? (await linkCheckEnabledStorage.getValue());
+}
+
+export async function getEffectiveWarningSettings(): Promise<{ warningLevel: WarningLevel; bodyCheckEnabled: boolean }> {
+  const policy = await getManagedPolicy();
+  if (policy.warningLevel) {
+    return { warningLevel: policy.warningLevel, bodyCheckEnabled: policy.warningLevel === "strict" };
+  }
+  return warningSettingsStorage.getValue();
+}

@@ -1,5 +1,5 @@
 import type { ContentScriptContext } from 'wxt/utils/content-script-context'
-import { extensionEnabledStorage, linkCheckEnabledStorage } from '../utils/storage'
+import { getEffectiveExtensionEnabled, getEffectiveLinkCheckEnabled } from '../utils/storage'
 import { checkLink, type LinkCheckResult } from '../utils/link-check'
 
 const LINK_CHECKED_ATTR = 'data-gmail-link-checked'
@@ -14,8 +14,8 @@ const TOOLTIP_ELEMENT_ID = 'gmail-link-flag-tooltip'
 // 受信メール内のリンクスキャン (毎tick呼び出し)
 export async function scanLinks(): Promise<void> {
   try {
-    const enabled = await linkCheckEnabledStorage.getValue()
-    const extensionEnabled = await extensionEnabledStorage.getValue()
+    const enabled = await getEffectiveLinkCheckEnabled()
+    const extensionEnabled = await getEffectiveExtensionEnabled()
     if (!enabled || !extensionEnabled) {
       unmarkAllLinks()
       return
