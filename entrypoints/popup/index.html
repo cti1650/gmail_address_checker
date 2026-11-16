@@ -73,6 +73,12 @@
         font-size: 12px;
       }
 
+      .managed-note {
+        font-size: 12px;
+        color: #1a73e8;
+        margin-top: 5px;
+      }
+
       .success {
         background: #e8f5e8;
         color: #137333;
@@ -88,6 +94,7 @@
         <input type="checkbox" id="extension-enabled" checked />
         拡張機能を有効にする
       </label>
+      <div id="extension-enabled-managed" class="managed-note" hidden>組織の設定で固定されています</div>
     </div>
 
     <div class="setting-group">
@@ -98,6 +105,7 @@
       <div style="font-size: 12px; color: #666; margin-top: 5px">
         画像リンク・表示と異なるリンク先を赤枠で警告します
       </div>
+      <div id="link-check-enabled-managed" class="managed-note" hidden>組織の設定で固定されています</div>
     </div>
 
     <div class="setting-group">
@@ -108,6 +116,10 @@
         placeholder="example.com, company.local"
       />
       <div class="domain-list">例: company.com, internal.local</div>
+      <div id="company-domains-managed" class="managed-note" hidden>組織の設定により、社内ドメインの追加はできません</div>
+      <div id="managed-domains" class="domain-list" hidden>
+        組織で設定済み: <span id="managed-domains-list"></span>
+      </div>
     </div>
 
     <div class="setting-group">
@@ -127,6 +139,7 @@
       <div style="font-size: 12px; color: #666; margin-top: 5px">
         厳格モード：メール本文に@ドメイン形式で記載されている場合、警告レベルを下げます
       </div>
+      <div id="warning-level-managed" class="managed-note" hidden>組織の設定で固定されています</div>
     </div>
 
     <button id="save-settings">設定を保存</button>

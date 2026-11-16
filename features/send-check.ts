@@ -1,5 +1,5 @@
 import type { ContentScriptContext } from 'wxt/utils/content-script-context'
-import { companyDomainsStorage, extensionEnabledStorage, warningSettingsStorage } from '../utils/storage'
+import { getEffectiveCompanyDomains, getEffectiveExtensionEnabled, getEffectiveWarningSettings } from '../utils/storage'
 import { getEmailAddresses, analyzeEmailSecurity, setsEqual, getExternalDomains, type EmailData } from '../utils/email'
 import {
   getWarningStyles,
@@ -68,7 +68,7 @@ function scanCompose(): void {
 
 async function analyzeAndShowRealtimeWarning(emails: EmailData): Promise<void> {
   try {
-    const extensionEnabled = await extensionEnabledStorage.getValue()
+    const extensionEnabled = await getEffectiveExtensionEnabled()
     if (!extensionEnabled) {
       hideRealtimeWarning()
       return
@@ -80,8 +80,8 @@ async function analyzeAndShowRealtimeWarning(emails: EmailData): Promise<void> {
       return
     }
 
-    const companyDomains = await companyDomainsStorage.getValue()
-    const warningSettings = await warningSettingsStorage.getValue()
+    const companyDomains = await getEffectiveCompanyDomains()
+    const warningSettings = await getEffectiveWarningSettings()
 
     const result = analyzeEmailSecurity(emails, companyDomains, warningSettings)
 
@@ -281,7 +281,7 @@ function updatePanelButtons(panel: HTMLElement, warningLevel: string): void {
 // 外部ドメインを取得するヘルパー
 async function getCurrentExternalDomains(emails: EmailData): Promise<Set<string>> {
   try {
-    const companyDomains = await companyDomainsStorage.getValue()
+    const companyDomains = await getEffectiveCompanyDomains()
     const allRecipients = [...emails.to, ...emails.cc, ...emails.bcc].filter(Boolean)
     return getExternalDomains(allRecipients, companyDomains)
   } catch (error) {
