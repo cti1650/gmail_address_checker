@@ -5,7 +5,6 @@ export default defineConfig({
   manifest: ({ browser }) => ({
     name: 'Gmail Address Checker',
     permissions: [
-      'activeTab',
       'storage'
     ],
     host_permissions: [
