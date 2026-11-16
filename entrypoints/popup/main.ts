@@ -1,8 +1,8 @@
-import { companyDomainsStorage, extensionEnabledStorage, getManagedPolicy, linkCheckEnabledStorage, warningSettingsStorage } from '../../utils/storage';
+import { companyDomainsStorage, extensionEnabledStorage, getManagedPolicy, linkCheckEnabledStorage, trustedLinkDomainsStorage, warningSettingsStorage } from '../../utils/storage';
 import type { ManagedPolicy, WarningLevel } from '../../utils/managed-policy';
 
 // 組織ポリシー（読み込み時に取得し、保存時に固定項目の判定に使う）
-let policy: ManagedPolicy = { companyDomains: [] };
+let policy: ManagedPolicy = { companyDomains: [], trustedLinkDomains: [] };
 
 // 組織ポリシーで固定された項目を操作不可にし、注記を表示する
 function markManaged(noteId: string, inputs: HTMLInputElement[]) {
@@ -15,6 +15,33 @@ function markManaged(noteId: string, inputs: HTMLInputElement[]) {
   }
 }
 
+// カンマ区切りの入力をドメイン一覧にする
+function parseDomainList(value: string): string[] {
+  return value
+    .split(',')
+    .map(domain => domain.trim().toLowerCase())
+    .filter(domain => domain.length > 0);
+}
+
+// ユーザー入力のドメイン欄と、組織ポリシーで配布されたドメインの表示を設定する
+function renderDomainSetting(ids: { input: string; managedNote: string; managedContainer: string; managedList: string }, userDomains: string[], managedDomains: string[]) {
+  const input = document.getElementById(ids.input) as HTMLInputElement | null;
+  if (input) {
+    input.value = userDomains.join(', ');
+    if (policy.allowUserDomains === false) {
+      input.value = '';
+      markManaged(ids.managedNote, [input]);
+    }
+  }
+
+  const container = document.getElementById(ids.managedContainer);
+  const list = document.getElementById(ids.managedList);
+  if (container && list && managedDomains.length > 0) {
+    list.textContent = managedDomains.join(', ');
+    container.hidden = false;
+  }
+}
+
 // 設定の読み込み
 async function loadSettings() {
   try {
@@ -22,24 +49,20 @@ async function loadSettings() {
     const extensionEnabled = await extensionEnabledStorage.getValue();
     const warningSettings = await warningSettingsStorage.getValue();
     const linkCheckEnabled = await linkCheckEnabledStorage.getValue();
+    const trustedLinkDomains = await trustedLinkDomainsStorage.getValue();
     policy = await getManagedPolicy();
 
-    const input = document.getElementById('company-domains') as HTMLInputElement;
-    if (input) {
-      input.value = companyDomains.join(', ');
-      if (policy.allowUserDomains === false) {
-        input.value = '';
-        markManaged('company-domains-managed', [input]);
-      }
-    }
-
-    // 組織ポリシーで配布されたドメイン（読み取り専用）
-    const managedContainer = document.getElementById('managed-domains');
-    const managedList = document.getElementById('managed-domains-list');
-    if (managedContainer && managedList && policy.companyDomains.length > 0) {
-      managedList.textContent = policy.companyDomains.join(', ');
-      managedContainer.hidden = false;
-    }
+    // 組織ポリシーで配布されたドメインは読み取り専用で表示
+    renderDomainSetting(
+      { input: 'company-domains', managedNote: 'company-domains-managed', managedContainer: 'managed-domains', managedList: 'managed-domains-list' },
+      companyDomains,
+      policy.companyDomains
+    );
+    renderDomainSetting(
+      { input: 'trusted-link-domains', managedNote: 'trusted-link-domains-managed', managedContainer: 'managed-trusted-domains', managedList: 'managed-trusted-domains-list' },
+      trustedLinkDomains,
+      policy.trustedLinkDomains
+    );
 
     const enabledCheckbox = document.getElementById('extension-enabled') as HTMLInputElement;
     if (enabledCheckbox) {
@@ -74,14 +97,15 @@ async function loadSettings() {
 // 設定の保存（組織ポリシーで固定された項目は保存しない）
 async function saveSettings() {
   try {
-    const input = document.getElementById('company-domains') as HTMLInputElement;
-    if (input && policy.allowUserDomains !== false) {
-      const domains = input.value
-        .split(',')
-        .map(domain => domain.trim().toLowerCase())
-        .filter(domain => domain.length > 0);
-
-      await companyDomainsStorage.setValue(domains);
+    if (policy.allowUserDomains !== false) {
+      const companyInput = document.getElementById('company-domains') as HTMLInputElement | null;
+      if (companyInput) {
+        await companyDomainsStorage.setValue(parseDomainList(companyInput.value));
+      }
+      const trustedInput = document.getElementById('trusted-link-domains') as HTMLInputElement | null;
+      if (trustedInput) {
+        await trustedLinkDomainsStorage.setValue(parseDomainList(trustedInput.value));
+      }
     }
 
     const enabledCheckbox = document.getElementById('extension-enabled') as HTMLInputElement;

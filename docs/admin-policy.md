@@ -35,6 +35,7 @@ sequenceDiagram
 ```json
 {
   "companyDomains": { "Value": ["example.com", "example.co.jp"] },
+  "trustedLinkDomains": { "Value": ["sendgrid.net", "salesforce.com"] },
   "allowUserDomains": { "Value": false },
   "warningLevel": { "Value": "strict" },
   "extensionEnabled": { "Value": true },
@@ -49,7 +50,8 @@ sequenceDiagram
 | キー | 型 | 内容 |
 |---|---|---|
 | `companyDomains` | 文字列の配列 | 社内として扱うメールドメインの一覧 |
-| `allowUserDomains` | 真偽値 | `false` にすると、ユーザーは社内ドメインを追加できず、`companyDomains` だけで判定する。未指定または `true` なら、ユーザーが追加したドメインと合算する |
+| `trustedLinkDomains` | 文字列の配列 | 受信時のリンクチェックで信頼するドメインの一覧。リンク先がこれらのドメインなら、偽装・無関係として警告しない（危険なプロトコルは常に警告）。社内ドメインは指定しなくても信頼される |
+| `allowUserDomains` | 真偽値 | `false` にすると、ユーザーは社内ドメインと信頼するドメインを追加できず、配布した `companyDomains` / `trustedLinkDomains` だけで判定する。未指定または `true` なら、ユーザーが追加したドメインと合算する |
 | `warningLevel` | `off` / `basic` / `strict` | 警告レベルをこの値に固定する |
 | `extensionEnabled` | 真偽値 | 拡張機能の有効 / 無効をこの値に固定する |
 | `linkCheckEnabled` | 真偽値 | 受信メールのリンクチェックの有効 / 無効をこの値に固定する |
@@ -59,7 +61,8 @@ sequenceDiagram
 ユーザーが警告を止められないようにするには、次の組み合わせがおすすめです。
 
 - `extensionEnabled: true` と `warningLevel: "strict"` で、警告を無効にできないようにする
-- `allowUserDomains: false` で、ユーザーが `gmail.com` などを社内ドメインに追加して警告を消すのを防ぐ
+- `allowUserDomains: false` で、ユーザーが `gmail.com` などを社内ドメインや信頼するドメインに追加して警告を消すのを防ぐ
+- 社内で使うメール配信サービスや SaaS のドメインを `trustedLinkDomains` に入れ、リンクチェックの誤検知を減らす
 - 拡張機能自体も管理コンソールで強制インストールにして、ブラウザから無効化・削除できないようにする
 
 値の型が正しくない項目（例: `"false"` のような文字列）は、配布されていないものとして扱われます。

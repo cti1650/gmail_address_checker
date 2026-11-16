@@ -115,6 +115,8 @@ test/                 # Vitest のテスト
 - **状態の一元管理**: 送信時チェックの表示状態は UIState オブジェクトで管理し、状態が変わったときだけ UI を更新する
 - **再判定の抑制**: チェック済みのリンクには `data-gmail-link-checked` 属性にチェック時の `href` を記録し、`href` が変わったときだけ再判定する
 - **ドメインの比較**: 社内ドメインと宛先のドメインは小文字にそろえて比較する
+- **Gmail の DOM への依存**: `name`、`data-compose-id`、`data-message-id`、`email`、`role`、`contenteditable` などの属性だけを使う。`.a3s` のような短縮クラス名はビルドごとに変わりうるため使わない
+- **作成画面ごとの判定**: 宛先欄から作成画面の範囲（`[data-compose-id]`、なければフォームの親要素）をたどり、範囲ごとに宛先・本文を取り出して判定する。テスト用の DOM は [test/utils/compose.test.ts](../test/utils/compose.test.ts) にある
 - **リソースの自動解放**: `setTimeout` / `setInterval` / `addEventListener` / MutationObserver はすべて WXT の `ContentScriptContext` 経由で登録し、拡張機能のリロード時に自動で解放する
 - **ツールチップの配置**: `position: fixed` で `document.body` 直下に置き、Gmail の `overflow: hidden` なコンテナで切れないようにしている
 - **エラー処理**: 拡張機能の更新時に起きる "Extension context invalidated" に対応
