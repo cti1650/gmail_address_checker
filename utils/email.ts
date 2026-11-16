@@ -89,11 +89,6 @@ export function getComposeEmails(): EmailData[] {
   return getComposeScopes().map(extractEmailData)
 }
 
-// ページ全体の宛先・本文をまとめて取得する
-export function getEmailAddresses(): EmailData {
-  return extractEmailData(document)
-}
-
 function isValidEmail(email: string): boolean {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
   return emailRegex.test(email)
