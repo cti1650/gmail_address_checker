@@ -1,6 +1,6 @@
 import type { ContentScriptContext } from 'wxt/utils/content-script-context'
 import { getEffectiveSettings } from '../utils/storage'
-import { getEmailAddresses, analyzeEmailSecurity, setsEqual, getExternalDomains, type EmailData } from '../utils/email'
+import { getComposeEmails, analyzeEmailSecurity, pickMostSevere, setsEqual, getExternalDomains, type EmailData } from '../utils/email'
 import {
   getWarningStyles,
   createIndicatorElement,
@@ -59,17 +59,18 @@ function scheduleTimeout(handler: () => void, ms: number): number {
 
 // 判定完了まで待てるよう Promise を返す（スケジューラが同時実行を防ぎ、古い結果での上書きを避ける）
 async function scanCompose(): Promise<void> {
-  let emails: EmailData
+  let composes: EmailData[]
   try {
-    emails = getEmailAddresses()
+    composes = getComposeEmails()
   } catch (error) {
     console.log('メールアドレス取得エラー:', error)
     return
   }
-  await analyzeAndShowRealtimeWarning(emails)
+  await analyzeAndShowRealtimeWarning(composes)
 }
 
-async function analyzeAndShowRealtimeWarning(emails: EmailData): Promise<void> {
+// 作成画面ごとに判定し、最も重い警告を表示する（本文チェックも作成画面ごとに行う）
+async function analyzeAndShowRealtimeWarning(composes: EmailData[]): Promise<void> {
   try {
     const settings = await getEffectiveSettings()
     if (!settings.extensionEnabled) {
@@ -77,14 +78,19 @@ async function analyzeAndShowRealtimeWarning(emails: EmailData): Promise<void> {
       return
     }
 
-    const allRecipients = [...emails.to, ...emails.cc, ...emails.bcc].filter(Boolean)
-    if (allRecipients.length === 0) {
+    const withRecipients = composes.filter(emails =>
+      [...emails.to, ...emails.cc, ...emails.bcc].some(Boolean)
+    )
+    const worst = pickMostSevere(withRecipients.map(emails => ({
+      emails,
+      result: analyzeEmailSecurity(emails, settings.companyDomains, settings.warningSettings),
+    })))
+    if (!worst) {
       hideRealtimeWarning()
       return
     }
 
-    const result = analyzeEmailSecurity(emails, settings.companyDomains, settings.warningSettings)
-
+    const { emails, result } = worst
     await showRealtimeWarning(result.message, emails, result.level, result.detailMessage)
   } catch (error) {
     hideRealtimeWarning()

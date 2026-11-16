@@ -123,6 +123,20 @@
     </div>
 
     <div class="setting-group">
+      <label for="trusted-link-domains">リンクチェックで信頼するドメイン（カンマ区切り）:</label>
+      <input
+        type="text"
+        id="trusted-link-domains"
+        placeholder="sendgrid.net, salesforce.com"
+      />
+      <div class="domain-list">リンク先がこれらのドメインなら警告しません（社内ドメインは自動で信頼されます）</div>
+      <div id="trusted-link-domains-managed" class="managed-note" hidden>組織の設定により、信頼するドメインの追加はできません</div>
+      <div id="managed-trusted-domains" class="domain-list" hidden>
+        組織で設定済み: <span id="managed-trusted-domains-list"></span>
+      </div>
+    </div>
+
+    <div class="setting-group">
       <h3>警告レベル</h3>
       <label>
         <input type="radio" name="warning-level" value="off" />

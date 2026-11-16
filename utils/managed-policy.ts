@@ -5,6 +5,7 @@ export type WarningLevel = 'off' | 'basic' | 'strict'
 // 組織ポリシー（chrome.storage.managed）の値。未配布の項目は undefined
 export interface ManagedPolicy {
   companyDomains: string[]
+  trustedLinkDomains: string[]
   allowUserDomains?: boolean
   warningLevel?: WarningLevel
   extensionEnabled?: boolean
@@ -22,6 +23,7 @@ export function parseManagedPolicy(raw: Record<string, unknown>): ManagedPolicy 
   const level = raw.warningLevel
   return {
     companyDomains: mergeCompanyDomains(raw.companyDomains, []),
+    trustedLinkDomains: mergeCompanyDomains(raw.trustedLinkDomains, []),
     allowUserDomains: asBoolean(raw.allowUserDomains),
     warningLevel: WARNING_LEVELS.includes(level as WarningLevel) ? (level as WarningLevel) : undefined,
     extensionEnabled: asBoolean(raw.extensionEnabled),
@@ -35,6 +37,16 @@ export function resolveCompanyDomains(policy: ManagedPolicy, userDomains: string
   return mergeCompanyDomains(policy.companyDomains, user)
 }
 
+// リンクチェックで信頼するドメイン（社内ドメインは常に含め、ユーザー設定分は社内ドメインと同じ条件で合算）
+export function resolveTrustedLinkDomains(
+  policy: ManagedPolicy,
+  userTrustedDomains: string[],
+  companyDomains: string[]
+): string[] {
+  const user = policy.allowUserDomains === false ? [] : userTrustedDomains
+  return mergeCompanyDomains([...companyDomains, ...policy.trustedLinkDomains], user)
+}
+
 export interface WarningSettings {
   warningLevel: WarningLevel
   bodyCheckEnabled: boolean
@@ -43,6 +55,7 @@ export interface WarningSettings {
 // 判定に使う設定値（ユーザー設定とポリシーの両方で同じ形）
 export interface Settings {
   companyDomains: string[]
+  trustedLinkDomains: string[]
   extensionEnabled: boolean
   linkCheckEnabled: boolean
   warningSettings: WarningSettings
@@ -50,8 +63,10 @@ export interface Settings {
 
 // ポリシーで配布された項目はユーザー設定より優先する
 export function resolveEffectiveSettings(policy: ManagedPolicy, user: Settings): Settings {
+  const companyDomains = resolveCompanyDomains(policy, user.companyDomains)
   return {
-    companyDomains: resolveCompanyDomains(policy, user.companyDomains),
+    companyDomains,
+    trustedLinkDomains: resolveTrustedLinkDomains(policy, user.trustedLinkDomains, companyDomains),
     extensionEnabled: policy.extensionEnabled ?? user.extensionEnabled,
     linkCheckEnabled: policy.linkCheckEnabled ?? user.linkCheckEnabled,
     warningSettings: policy.warningLevel

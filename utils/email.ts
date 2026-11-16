@@ -6,153 +6,35 @@ export interface EmailData {
   body: string
 }
 
-function getActiveComposeWindow(): Element | null {
-  // まず従来の方法で基本的なメール作成画面があるかチェック
-  const basicComposeCheck = document.querySelector('[aria-label="新規メッセージ"], form[enctype="multipart/form-data"]')
-  if (!basicComposeCheck) {
-    return null
-  }
-  
-  // Gmailのメール作成画面を特定するための複数のセレクタパターン
-  const composeSelectors = [
-    '[aria-label="新規メッセージ"]',
-    '[role="dialog"][aria-label*="メッセージ"]',
-    '[role="dialog"][aria-label*="Message"]',
-    '.nH[role="dialog"]', // Gmail の一般的なダイアログクラス
-    'form[enctype="multipart/form-data"]', // メール送信フォーム
-  ]
-  
-  let composeWindows: Element[] = []
-  
-  // 各セレクタで検索してメール作成画面を収集
-  for (const selector of composeSelectors) {
-    const elements = Array.from(document.querySelectorAll(selector))
-    
-    // メール作成に関連する要素かどうかを確認
-    const relevantElements = elements.filter(element => {
-      // To, CC, BCC, 本文フィールドのいずれかが含まれているかチェック
-      const hasToField = element.querySelector('[name="to"]') !== null
-      const hasCcField = element.querySelector('[name="cc"]') !== null
-      const hasBccField = element.querySelector('[name="bcc"]') !== null
-      const hasBodyField = element.querySelector('[name="body"], [contenteditable="true"][role="textbox"]') !== null
-      
-      return hasToField || hasCcField || hasBccField || hasBodyField
-    })
-    
-    composeWindows.push(...relevantElements)
-  }
-  
-  // 重複を除去
-  composeWindows = composeWindows.filter((element, index, array) => 
-    array.indexOf(element) === index
-  )
-  
-  if (composeWindows.length === 0) {
-    return null
-  }
-  
-  if (composeWindows.length === 1) {
-    return composeWindows[0] ?? null
-  }
-  
-  // 複数のメール作成画面がある場合、最前面のものを特定
-  return getTopMostComposeWindow(composeWindows)
-}
+const EMPTY_EMAIL_DATA: EmailData = { to: [], cc: [], bcc: [], from: '', body: '' }
 
-function getTopMostComposeWindow(composeWindows: Element[]): Element | null {
-  // まず表示されている要素のみにフィルター
-  const visibleWindows = composeWindows.filter(window => {
-    const element = window as HTMLElement
-    const computedStyle = getComputedStyle(element)
-    
-    return computedStyle.display !== 'none' && 
-           computedStyle.visibility !== 'hidden' && 
-           element.offsetWidth > 0 && 
-           element.offsetHeight > 0
-  })
-  
-  if (visibleWindows.length === 0) {
-    return null
-  }
-  
-  if (visibleWindows.length === 1) {
-    return visibleWindows[0] ?? null
-  }
-  
-  // z-indexでソート（高い順）
-  const sortedByZIndex = [...visibleWindows].sort((a, b) => {
-    const aElement = a as HTMLElement
-    const bElement = b as HTMLElement
-    
-    const aZIndex = parseInt(getComputedStyle(aElement).zIndex) || 0
-    const bZIndex = parseInt(getComputedStyle(bElement).zIndex) || 0
-    
-    // z-indexが異なる場合は高い順
-    if (aZIndex !== bZIndex) {
-      return bZIndex - aZIndex
-    }
-    
-    // z-indexが同じ場合は、DOM順序で後のもの（より新しく追加されたもの）を優先
-    const allElements = Array.from(document.body.querySelectorAll('*'))
-    const aPosition = allElements.indexOf(aElement)
-    const bPosition = allElements.indexOf(bElement)
-    
-    return bPosition - aPosition
-  })
-  
-  return sortedByZIndex[0] ?? null
-}
-
-function getEmailAddressesLegacy(): EmailData {
+// 指定した範囲（作成画面 1 つ、またはページ全体）から宛先・本文を取り出す
+function extractEmailData(scope: ParentNode): EmailData {
   try {
-    // To, CC, BCCのメールアドレスを取得（従来の方法）
-    const toElements = document.querySelectorAll('[aria-label=新規メッセージ] [name=to] [data-hovercard-id],form [aria-label=To] [data-hovercard-id]')
-    const ccElements = document.querySelectorAll('[aria-label=新規メッセージ] [name=cc] [data-hovercard-id],form [aria-label=Cc] [data-hovercard-id]')
-    const bccElements = document.querySelectorAll('[aria-label=新規メッセージ] [name=bcc] [data-hovercard-id],form [aria-label=Bcc] [data-hovercard-id]')
-    
-    // Fromアドレスを取得
-    const fromElement = document.querySelector('input[name="from"]') as HTMLInputElement
-    
-    // メール本文を取得 - 複数のセレクタを試行
-    const bodySelectors = [
+    const toElements = scope.querySelectorAll('[name=to] [data-hovercard-id],form [aria-label=To] [data-hovercard-id]')
+    const ccElements = scope.querySelectorAll('[name=cc] [data-hovercard-id],form [aria-label=Cc] [data-hovercard-id]')
+    const bccElements = scope.querySelectorAll('[name=bcc] [data-hovercard-id],form [aria-label=Bcc] [data-hovercard-id]')
+
+    const fromElement = scope.querySelector('input[name="from"]') as HTMLInputElement | null
+
+    // 本文: 入力中の内容がそのまま反映される編集領域を優先し、なければ hidden input 等を使う
+    // （hidden input は空のことや、HTML 文字列が入っていることがある）
+    const bodyText = firstNonEmptyText(scope, [
+      '[contenteditable="true"][role="textbox"]',
       '[name="body"]',
       '[data-name="body"]',
-      '.gmail_default',
-      '[contenteditable="true"][role="textbox"]'
-    ]
-    
-    let bodyText = ''
-    for (const selector of bodySelectors) {
-      const bodyElement = document.querySelector(selector) as HTMLInputElement | HTMLTextAreaElement | HTMLElement
-      if (bodyElement) {
-        bodyText = bodyElement.textContent || bodyElement.innerText || (bodyElement as any).value || ''
-        break
-      }
-    }
+      '.gmail_default'
+    ])
+    const uetText = firstNonEmptyText(scope, ['[name="uet"]', '[data-name="uet"]'])
 
-    // UETフィールドを取得 - 複数のセレクタを試行
-    const uetSelectors = [
-      '[name="uet"]',
-      '[data-name="uet"]'
-    ]
-    
-    let uetText = ''
-    for (const selector of uetSelectors) {
-      const uetElement = document.querySelector(selector) as HTMLInputElement | HTMLTextAreaElement
-      if (uetElement) {
-        uetText = uetElement.value || ''
-        break
-      }
-    }
-    
     // メールアドレスのバリデーションと重複除去
     const extractValidEmails = (elements: NodeList): string[] => {
       return Array.from(elements)
         .map(el => (el as Element).getAttribute('data-hovercard-id') || '')
         .filter(email => email && isValidEmail(email))
-        .filter((email, index, array) => array.indexOf(email) === index) // 重複除去
+        .filter((email, index, array) => array.indexOf(email) === index)
     }
-    
+
     return {
       to: extractValidEmails(toElements),
       cc: extractValidEmails(ccElements),
@@ -161,20 +43,55 @@ function getEmailAddressesLegacy(): EmailData {
       body: combineBodyText(bodyText, uetText),
     }
   } catch (error) {
-    console.warn('Error getting email addresses (legacy):', error)
-    return {
-      to: [],
-      cc: [],
-      bcc: [],
-      from: '',
-      body: '',
-    }
+    console.warn('Error getting email addresses:', error)
+    return { ...EMPTY_EMAIL_DATA }
   }
 }
 
+function firstNonEmptyText(scope: ParentNode, selectors: string[]): string {
+  for (const selector of selectors) {
+    for (const element of Array.from(scope.querySelectorAll(selector))) {
+      const text = elementText(element)
+      if (text.trim()) return text
+    }
+  }
+  return ''
+}
+
+// 入力欄は value（HTML ならテキストに変換）、それ以外は textContent を使う
+function elementText(element: Element): string {
+  if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) {
+    return /<[a-z][\s\S]*>/i.test(element.value) ? htmlToText(element.value) : element.value
+  }
+  return element.textContent || ''
+}
+
+// template 要素の中身は描画・スクリプト実行・画像読み込みが行われないため、安全にタグを除去できる
+function htmlToText(html: string): string {
+  const template = document.createElement('template')
+  template.innerHTML = html
+  return template.content.textContent || ''
+}
+
+// 作成画面の範囲を取得する。宛先欄から、作成画面の要素（data-compose-id）またはフォームの親要素をたどる
+// （本文の編集領域はフォームの外にあるため、フォームの親要素を範囲にする）
+function getComposeScopes(): Element[] {
+  const scopes: Element[] = []
+  document.querySelectorAll('[name="to"], form [aria-label="To"]').forEach((field) => {
+    const scope = field.closest('[data-compose-id]') ?? field.closest('form')?.parentElement
+    if (scope && !scopes.includes(scope)) scopes.push(scope)
+  })
+  return scopes
+}
+
+// 作成画面ごとの宛先・本文（最小化された作成画面も含む）
+export function getComposeEmails(): EmailData[] {
+  return getComposeScopes().map(extractEmailData)
+}
+
+// ページ全体の宛先・本文をまとめて取得する
 export function getEmailAddresses(): EmailData {
-  // 一時的に複数ウィンドウ対応を無効化し、安定した従来の動作に戻す
-  return getEmailAddressesLegacy()
+  return extractEmailData(document)
 }
 
 function isValidEmail(email: string): boolean {
@@ -361,6 +278,15 @@ export function analyzeEmailSecurity(
       detailMessage: `社外ドメイン: ${Array.from(externalDomains).join(', ')}`
     }
   }
+}
+
+const SEVERITY: Record<WarningLevel, number> = { safe: 0, medium: 1, high: 2 }
+
+// 作成画面ごとの判定結果から、最も重い警告を選ぶ（同じ重さなら先頭を優先）
+export function pickMostSevere<T extends { result: WarningResult }>(items: T[]): T | null {
+  return items.reduce<T | null>((worst, item) => (
+    !worst || SEVERITY[item.result.level] > SEVERITY[worst.result.level] ? item : worst
+  ), null)
 }
 
 export function setsEqual<T>(set1: Set<T>, set2: Set<T>): boolean {

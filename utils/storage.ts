@@ -11,6 +11,15 @@ export const companyDomainsStorage = storage.defineItem<string[]>(
   }
 );
 
+// リンクチェックで信頼するドメイン（ユーザー設定分）
+export const trustedLinkDomainsStorage = storage.defineItem<string[]>(
+  "local:trustedLinkDomains",
+  {
+    defaultValue: [],
+    version: 1,
+  }
+);
+
 // 警告履歴を管理（オプション）
 export const warningHistoryStorage = storage.defineItem<
   {
@@ -53,6 +62,7 @@ export const linkCheckEnabledStorage = storage.defineItem<boolean>(
 // 組織ポリシー（Google Workspace / Chrome Enterprise）で配布される設定（読み取り専用）
 const MANAGED_KEYS = [
   "companyDomains",
+  "trustedLinkDomains",
   "allowUserDomains",
   "warningLevel",
   "extensionEnabled",
@@ -75,14 +85,15 @@ export async function getManagedPolicy(): Promise<ManagedPolicy> {
 
 // 判定に使う設定値（ポリシーで配布された項目はユーザー設定より優先）
 async function loadEffectiveSettings(): Promise<Settings> {
-  const [policy, companyDomains, extensionEnabled, linkCheckEnabled, warningSettings] = await Promise.all([
+  const [policy, companyDomains, trustedLinkDomains, extensionEnabled, linkCheckEnabled, warningSettings] = await Promise.all([
     getManagedPolicy(),
     companyDomainsStorage.getValue(),
+    trustedLinkDomainsStorage.getValue(),
     extensionEnabledStorage.getValue(),
     linkCheckEnabledStorage.getValue(),
     warningSettingsStorage.getValue(),
   ]);
-  return resolveEffectiveSettings(policy, { companyDomains, extensionEnabled, linkCheckEnabled, warningSettings });
+  return resolveEffectiveSettings(policy, { companyDomains, trustedLinkDomains, extensionEnabled, linkCheckEnabled, warningSettings });
 }
 
 // watchSettingsChanges() で変更監視中のみキャッシュする（監視なしでは毎回読み込む）

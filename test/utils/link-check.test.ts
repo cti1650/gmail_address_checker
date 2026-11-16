@@ -149,6 +149,26 @@ describe('checkLink', () => {
     document.body.innerHTML = ''
   })
 
+  it('信頼するドメインへの画像リンクは関連ドメインと不一致でもスルー', () => {
+    const a = makeAnchor('<a href="https://u123.ct.sendgrid.net/"><img src="x.png" alt=""></a>')
+    expect(checkLink(a, ['example.com'], ['sendgrid.net']).type).toBeNull()
+  })
+
+  it('表示テキストと異なるリンク先でも信頼するドメインならスルー', () => {
+    const a = makeAnchor('<a href="https://u123.ct.sendgrid.net/ls/click">https://example.com</a>')
+    expect(checkLink(a, [], ['sendgrid.net']).type).toBeNull()
+  })
+
+  it('信頼するドメインでも危険なプロトコルは検知する', () => {
+    const a = makeAnchor('<a href="javascript:alert(1)">sendgrid.net</a>')
+    expect(checkLink(a, [], ['sendgrid.net']).type).toBe('unsafe-protocol')
+  })
+
+  it('信頼するドメイン以外への画像リンクは従来どおりunrelated', () => {
+    const a = makeAnchor('<a href="https://evil.com/"><img src="x.png" alt=""></a>')
+    expect(checkLink(a, ['example.com'], ['sendgrid.net']).type).toBe('unrelated')
+  })
+
   it('画像リンクは関連ドメインが空ならスルー', () => {
     const a = makeAnchor('<a href="https://example.com/"><img src="x.png" alt=""></a>')
     document.body.appendChild(a)

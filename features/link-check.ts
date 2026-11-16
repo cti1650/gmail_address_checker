@@ -11,6 +11,9 @@ const LINK_PROTOCOL_ATTR = 'data-gmail-link-protocol'
 const STYLE_ELEMENT_ID = 'gmail-link-flag-styles'
 const TOOLTIP_ELEMENT_ID = 'gmail-link-flag-tooltip'
 
+// 前回スキャン時の信頼するドメイン（変わったらチェック済みのリンクも再判定する）
+let lastTrustedKey = ''
+
 // 受信メール内のリンクスキャン (毎tick呼び出し)
 export async function scanLinks(): Promise<void> {
   try {
@@ -20,9 +23,16 @@ export async function scanLinks(): Promise<void> {
       return
     }
 
+    const trustedKey = settings.trustedLinkDomains.join(',')
+    if (trustedKey !== lastTrustedKey) {
+      unmarkAllLinks()
+      lastTrustedKey = trustedKey
+    }
+
     // 受信メールの個別メッセージ ([data-message-id]) ごとに走査
     // 本文の [vlink] 要素があればそのスコープに絞る (ヘッダーのリンクを除外)
-    // 無ければメッセージ全体にフォールバック
+    // 無ければメッセージ全体にフォールバック (プレーンテキストのメールには [vlink] がない)
+    // ※ Gmail の短縮クラス名 (.a3s 等) はビルドで変わりうるため使わない
     const messages = document.querySelectorAll('[data-message-id]')
     messages.forEach((message) => {
       const relatedDomains = collectRelatedDomains(message)
@@ -35,7 +45,7 @@ export async function scanLinks(): Promise<void> {
         anchor.setAttribute(LINK_CHECKED_ATTR, href)
         unflagLink(anchor)
 
-        const result = checkLink(anchor, relatedDomains)
+        const result = checkLink(anchor, relatedDomains, settings.trustedLinkDomains)
         if (result.type) {
           flagLink(anchor, result)
         }

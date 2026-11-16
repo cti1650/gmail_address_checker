@@ -72,9 +72,11 @@ export function getHrefHost(href: string): string | null {
   }
 }
 
+// trustedDomains: リンク先がこれらのドメインなら偽装・無関係として扱わない（危険プロトコルは常に検知）
 export function checkLink(
   anchor: HTMLAnchorElement,
-  relatedDomains: string[] = []
+  relatedDomains: string[] = [],
+  trustedDomains: string[] = []
 ): LinkCheckResult {
   const rawHref = anchor.getAttribute('href') || anchor.href
   if (!rawHref) return { type: null }
@@ -93,6 +95,7 @@ export function checkLink(
 
   const hrefHost = getHrefHost(realHref)
   if (!hrefHost) return { type: null }
+  if (trustedDomains.some((d) => hostsMatch(d, hrefHost))) return { type: null }
 
   const text = (anchor.textContent || '').trim()
   const textHosts = text ? extractHostsFromText(text) : []
